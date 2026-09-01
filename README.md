@@ -162,7 +162,11 @@ server/      A small https server for testing on a real phone.
 android/     Wraps the same app for Android.
 ```
 
-## Credits
+## AI USAGE:-
+
+StarGaze was designed and developed as a hands-on project, from the architecture and astronomical positioning logic to the Android sensor pipeline, rendering, validation, and testing. I researched the underlying concepts, made the technical decisions, implemented and debugged the systems, and iterated on the app throughout development.
+
+I used an AI-assisted coding environment as part of the workflow, primarily for maintaining context across the codebase and Agentic Applications and changes. It was a development tool within the project's architecture.
 
 # Credits
 
