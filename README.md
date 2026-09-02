@@ -1,189 +1,192 @@
-# StarGaze
+StarGaze
 
-<p align="center">
-  <img src="https://raw.githubusercontent.com/Ramskandh-Thirandasu/stargaze/refs/heads/main/docs/cover.png" alt="StarGaze" width="100%">
-</p>
+A small offline planetarium for your phone. Point your phone at the sky and StarGaze shows you what you're looking at.
 
-**Point your phone at the night sky and it tells you what you're looking at.**
+<p align="center"> <img src="https://raw.githubusercontent.com/Ramskandh-Thirandasu/stargaze/refs/heads/main/docs/cover.png" alt="StarGaze" width="100%"> </p>
 
-[**Try it now →**](https://ramskandh-thirandasu.github.io/stargaze/) · works in any
-browser, installs like an app, and keeps working with no signal
+Try StarGaze
 
-<p align="center">
-  <img src="https://raw.githubusercontent.com/Ramskandh-Thirandasu/stargaze/refs/heads/main/docs/phone-sky.png" alt="The sky view: constellation figures, a compass strip, and readouts showing where the phone is pointed" width="300">
-  <img src="https://raw.githubusercontent.com/Ramskandh-Thirandasu/stargaze/refs/heads/main/docs/phone-tonight.png" alt="The Tonight list, ordered by what is actually visible right now" width="300">
-</p>
-<p align="center">
-  <img src="https://raw.githubusercontent.com/Ramskandh-Thirandasu/stargaze/refs/heads/main/docs/tablet-sky.png" alt="The same app on a tablet, where the panels sit beside the sky rather than over it" width="640">
-</p>
+It runs in a browser, can be installed like an app, and works without an internet connection.
 
-You've probably looked up, seen something bright, and wondered what it was.
-Point your phone at it and StarGaze names it — the star, the planet, or the
-constellation it belongs to.
+<p align="center"> <img src="https://raw.githubusercontent.com/Ramskandh-Thirandasu/stargaze/refs/heads/main/docs/phone-sky.png" alt="StarGaze sky view showing constellations and object information" width="300"> <img src="https://raw.githubusercontent.com/Ramskandh-Thirandasu/stargaze/refs/heads/main/docs/phone-tonight.png" alt="StarGaze Tonight view showing objects currently visible" width="300"> </p> <p align="center"> <img src="https://raw.githubusercontent.com/Ramskandh-Thirandasu/stargaze/refs/heads/main/docs/tablet-sky.png" alt="StarGaze running on a tablet" width="640"> </p>
+What it does
+Shows 1,009 stars and all 88 constellations.
+Shows Mercury, Venus, Mars, Jupiter, Saturn, and the Moon.
+Uses your location, time, and phone orientation to calculate what is in the sky.
+Has an optional camera mode with labels over the real sky.
+Works offline. The star data is bundled with the app.
+Includes compass calibration for phones with inaccurate sensors.
+Warns when magnetic interference is affecting the compass.
+Lets you search for objects by name.
+Has a "Tonight" list showing things that are currently visible.
+Has a drag mode for using the app without phone sensors.
+Why I made it
 
-No account, no sign-up, nothing to install if you don't want to. Open the link
-and it works.
+I wanted to make something that could answer a simple question while looking at the night sky:
 
-## How does it know?
+What is that?
 
-Here's the surprising part: **it never looks at the sky.**
+There are already a lot of astronomy apps that do this, but I wanted to understand how one actually works instead of relying on an existing astronomy service.
 
-You might expect an app like this to photograph the sky and recognise it. That
-approach barely works. A phone photo of the night sky is a nearly black square
-with a few faint specks — there's almost nothing in the image to recognise.
+I initially looked at whether the app could identify stars from the camera. That didn't make much sense for this project. A normal phone camera doesn't get much useful information from a dark sky, especially with light pollution.
 
-So StarGaze does what astronomers have done for centuries: it *calculates*.
-Three things are enough to know exactly what's above you:
+Instead, StarGaze calculates where objects should be.
 
-| | |
-|---|---|
-| **Where you are** | The stars above India aren't the stars above Iceland. |
-| **What time it is** | The sky rotates about 15° every hour, so it looks different at 9pm than at midnight. |
-| **Which way you're pointing** | Your phone's compass and motion sensors already know this. |
+The main inputs are:
 
-Feed those three into some geometry and you know precisely which star sits at
-any point in the sky. It's fast, it's exact, and it needs no internet.
+Your location
+The current time
+The direction your phone is pointing
 
-**Everything is worked out on your phone.** Your location never leaves the
-device — there's no server, no account, and no tracking of any kind.
+The astronomy code uses those values to calculate where objects should appear in the sky. The result is then converted into coordinates that the UI can draw.
 
-## What you'll see
+This also means the app doesn't need to upload a photo or your location to a server. The calculations happen on the device.
 
-Only things you could genuinely spot yourself, standing outside.
+How the sky calculation works
 
-- **1,009 stars.** The brightest ones — roughly what a phone camera can pick up
-  under a properly dark sky. All 88 constellations are drawn complete.
-- **Five planets** — Mercury, Venus, Mars, Jupiter and Saturn. The ones visible
-  to the naked eye, as they have been for all of recorded history.
-- **The Moon**, showing its current phase.
+The astronomy code is separate from the UI in packages/core.
 
-Uranus and Neptune are deliberately left out. The app knows exactly where they
-are, but they're too faint to see, and a marker floating over blank sky would
-just teach you not to trust the app.
+For stars, StarGaze uses catalogue data containing their positions, magnitudes, colours, and names. The positions are converted through the required coordinate systems and adjusted for the observer's location and time.
 
-For the same reason, anything technically above the horizon but drowned out by
-daylight or a bright Moon is shown dimmed and labelled, rather than quietly
-hidden. Knowing something is *there but invisible* is more useful than it
-silently vanishing.
+For planets and the Moon, their positions are calculated from astronomical data rather than being stored as a fixed list of positions.
 
-## What it can do
+After calculating an object's position, it is converted to altitude and azimuth. The sky view uses those values to figure out where the object should be drawn.
 
-- **Works fully offline.** The whole star catalogue ships inside the app —
-  about 57 KB, smaller than a single photo. Handy, given stargazing tends to
-  happen away from towns and signal.
-- **Camera view.** See the real sky through your camera with the star names
-  drawn on top. Optional — it works fine without.
-- **Compass calibration.** Phone compasses are genuinely inaccurate, typically
-  off by 5–15°. Point at a bright star you can already identify, tap confirm,
-  and the app corrects itself.
-- **Interference warning.** Metal, speakers and cars throw compasses off badly.
-  When the app detects this, it tells you instead of quietly being wrong.
-- **Search** for anything by name, and a **Tonight** list of what's actually
-  worth looking at right now.
-- **Drag mode.** No sensors, no permissions, no phone required — just drag to
-  look around. Works on a laptop.
+The phone's sensors provide the direction the user is looking.
 
-## Try it yourself
+Keeping the astronomy code separate from the UI also makes it easier to test the calculations without needing a browser or phone.
 
-The easiest way is [the live version](https://ramskandh-thirandasu.github.io/stargaze/) —
-nothing to install.
+Compass calibration
 
-To run the code:
+The astronomy calculations can be very accurate, but phone compasses are not.
 
-```bash
+A phone can easily be several degrees off. Metal objects, speakers, cars, and other electronics can also affect the magnetic sensor.
+
+StarGaze has a calibration mode where you can point at a star you already know and use it as a reference. The app can then correct the phone's orientation.
+
+There is also an interference check. If the magnetic sensor looks unreliable, StarGaze shows a warning instead of silently using a bad heading.
+
+Things I left out on purpose
+
+I don't show Uranus and Neptune in the normal sky view.
+
+The app can calculate their positions and they are included in testing, but they are too faint to be useful for a normal naked-eye sky view. Showing a label for something you can't actually see would make the app less useful.
+
+The same idea applies to objects that are technically above the horizon but aren't realistically visible because of daylight or a bright Moon.
+
+Instead of completely hiding them, StarGaze dims them and indicates that they aren't currently visible.
+
+Offline
+
+StarGaze doesn't make requests to a server while you are using it.
+
+The star catalogue is bundled with the application. The compressed catalogue is about 57 KB.
+
+This was important to me because stargazing often happens away from places with a good internet connection.
+
+Your location also stays on the device.
+
+Accuracy
+
+I tested the calculated positions against NASA JPL Horizons at several dates between 2021 and 2045.
+
+The differences are measured in arcseconds. For reference, the full Moon is about 1,800 arcseconds across.
+
+Object	Error
+Sun	13.5"
+Mercury	21.7"
+Venus	18.0"
+Mars	31.7"
+Moon	16.5"
+Jupiter	368.3"
+Saturn	435.0"
+
+Uranus and Neptune are also calculated and tested, but aren't displayed in the normal sky view.
+
+In actual use, the phone's compass is a much bigger source of error than the astronomy calculations. A phone compass can be off by 5-15 degrees, which is much larger than the errors in the calculated positions.
+
+Running locally
+
+You'll need Node.js and npm.
+
 npm install
-npm test          # 118 tests
-npm run dev       # then open http://localhost:5173
-```
+npm test
+npm run dev
 
-<details>
-<summary><b>Running it on your phone during development</b></summary>
 
-Phone browsers only allow camera, location and motion on a **secure (https)
-connection**, and they fail silently otherwise — you just get a page that never
-asks permission, with no error explaining why.
+Then open:
 
-```bash
-npm run serve     # serves over https and prints your network address
-```
+http://localhost:5173
 
-Your phone will warn about the certificate once. That's expected — accept it.
 
-</details>
+The test suite currently has 118 passing tests.
 
-<details>
-<summary><b>Building the Android app</b></summary>
+Testing on a phone
 
-```bash
+Phone browsers require HTTPS for camera, location, and motion sensor access.
+
+For local testing, run:
+
+npm run serve
+
+
+The server prints an HTTPS address that you can open from your phone.
+
+Your browser may show a certificate warning because the local certificate isn't from a public certificate authority. That's expected for the development server.
+
+Android
+
+The Android version uses the same web app.
+
 npm run android:sync
 npm run android:open
-```
 
-You'll need **JDK 21 specifically**. Newer versions fail with
-`Unsupported class file major version`, including the one Android Studio ships
-with. The debug app is built to
-`android/app/build/outputs/apk/debug/app-debug.apk`.
 
-</details>
+The Android build currently requires JDK 21. Using a newer JDK can cause Gradle errors such as Unsupported class file major version.
 
-## How accurate is it?
+The debug APK is generated at:
 
-Short answer: **the astronomy is far more accurate than your phone's compass**,
-so the compass is what limits it.
+android/app/build/outputs/apk/debug/app-debug.apk
 
-Positions are checked automatically against [JPL Horizons](https://ssd.jpl.nasa.gov/horizons/),
-NASA's own reference system, at six dates spanning 2021–2045.
+Project structure
+tools/
+  Scripts used to prepare the astronomy data.
 
-Errors are measured in **arcseconds** — an arcsecond is 1/3600th of a degree.
-For scale, the full Moon is about **1,800 arcseconds** wide.
-
-| Object | Error | Object | Error |
-|---|---|---|---|
-| Sun | 13.5″ | Jupiter | 368.3″ |
-| Mercury | 21.7″ | Saturn | 435.0″ |
-| Venus | 18.0″ | Uranus\* | 110.2″ |
-| Mars | 31.7″ | Neptune\* | 34.4″ |
-| Moon | 16.5″ | | |
-
-\* Calculated and tested, but never drawn — see above.
-
-Even the worst of these is a quarter of a Moon-width. Meanwhile a phone compass
-is off by 5–15° — that's **18,000 to 54,000 arcseconds**, hundreds of times
-larger.
-
-## Project layout
-
-```
-tools/       Python scripts that prepare the star data. Never run in the app.
 packages/
-  core/      The astronomy maths. Pure calculation, 118 tests.
-  web/       The app itself.
-server/      A small https server for testing on a real phone.
-android/     Wraps the same app for Android.
-```
+  core/
+    Astronomy calculations and tests.
 
-## AI USAGE:-
+  web/
+    The main StarGaze web app.
 
-StarGaze was designed and developed as a hands-on project, from the architecture and astronomical positioning logic to the Android sensor pipeline, rendering, validation, and testing. I researched the underlying concepts, made the technical decisions, implemented and debugged the systems, and iterated on the app throughout development.
+server/
+  HTTPS development server for testing on a phone.
 
-I used an AI-assisted coding environment as part of the workflow, primarily for maintaining context across the codebase and Agentic Applications and changes. It was a development tool within the project's architecture.
+android/
+  Android wrapper around the web app.
 
-# Credits
+Data sources
 
-StarGaze computes everything on device. The catalogues below are built into the
-app by `tools/`; all four are free to use, and none of them are contacted at
-runtime. Show this list somewhere in the app's about screen.
+The datasets are prepared by the scripts in tools/ and bundled into the application. They aren't downloaded while the app is running.
 
-| Data | Source |
-|---|---|
-| Star positions, magnitudes, colours, names | [HYG Database v4.0](https://github.com/astronexus/HYG-Database) — David Nash / astronexus (CC BY-SA 4.0) |
-| Constellation figures | [Stellarium](https://github.com/Stellarium/stellarium) sky culture `modern_iau` (CC BY-SA 4.0) |
-| Planetary elements | [NASA JPL SSD, *Approximate Positions of the Planets*](https://ssd.jpl.nasa.gov/planets/approx_pos.html) (public domain) |
-| Magnetic declination | [IGRF-14](https://www.ngdc.noaa.gov/IAGA/vmod/igrf.html) — IAGA Working Group V-MOD, via NOAA NCEI (free use) |
+Data	Source
+Star positions, magnitudes, colours, and names	HYG Database v4.0 by David Nash / astronexus, CC BY-SA 4.0
+Constellation figures	Stellarium modern_iau sky culture, CC BY-SA 4.0
+Planetary elements	NASA JPL SSD, Approximate Positions of the Planets, public domain
+Magnetic declination	IGRF-14, IAGA Working Group V-MOD, via NOAA NCEI
 
-Reference positions used to test the astronomy come from
-[JPL Horizons](https://ssd.jpl.nasa.gov/horizons/).
+The reference positions used for the astronomy tests come from NASA JPL Horizons.
 
-## License
+AI usage
 
-MIT — see [LICENSE](LICENSE). The bundled datasets keep their own licenses.
+I used AI-assisted coding tools during development.
+
+I still made the architecture decisions, researched the astronomy, implemented the sensor and rendering systems, and tested and debugged the application. I used AI as a development tool for working through code, keeping context across the project, and helping with implementation and debugging.
+
+I also verified the astronomy calculations against external reference data instead of treating AI-generated calculations as automatically correct.
+
+License
+
+MIT. See LICENSE.
+
+The bundled datasets have their own licenses, listed above.
