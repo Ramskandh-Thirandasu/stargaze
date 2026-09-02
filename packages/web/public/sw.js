@@ -10,7 +10,7 @@
  * be more machinery than the whole app.
  */
 
-const VERSION = 'stargaze-v1';
+const VERSION = 'stargaze-v2';
 
 /** The catalogues. These never change, so cache-first with no revalidation. */
 const DATA = /\/data\/[^/]+\.json$/;
@@ -62,8 +62,20 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Everything else: serve from cache for speed, refresh in the background so
-  // an update lands on the next launch.
+  // The page itself is the one thing that must never be stale: it names the
+  // hashed asset files, so a cached copy pins the whole app to the build it
+  // shipped with. Network first, cache only as the offline fallback.
+  if (request.mode === 'navigate') {
+    event.respondWith(
+      fetchAndCache(request).catch(() =>
+        caches.match(request).then((hit) => hit ?? caches.match('./index.html')),
+      ),
+    );
+    return;
+  }
+
+  // Everything else is hashed, so a cache hit is always the right answer for
+  // the build that asked for it. Refresh behind the scenes anyway.
   event.respondWith(
     caches.match(request).then((hit) => {
       const network = fetchAndCache(request).catch(() => hit);
