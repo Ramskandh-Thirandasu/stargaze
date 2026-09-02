@@ -1,25 +1,36 @@
-/* StarGaze. Dark by necessity: this sits over a camera feed at night. */
+/* StarGaze.
+ *
+ * Styled like a field instrument rather than an app: ink and warm paper,
+ * tight corners, hairlines instead of shadows. The accent is an ember red
+ * because that is the light astronomers actually observe under -- it is the
+ * one hue that does not wreck your dark adaptation.
+ */
 
 :root {
-  --bg: #05070d;
-  --glass: rgba(9, 13, 21, 0.58);
-  --hair: rgba(255, 255, 255, 0.11);
-  --hair-strong: rgba(255, 255, 255, 0.18);
-  --ink: #eef2f8;
-  --dim: rgba(238, 242, 248, 0.6);
-  --faint: rgba(238, 242, 248, 0.38);
-  --accent: #e9a93b;
-  --accent-ink: #06080e;
+  --bg: #070a12;
+  /* Two panel weights. The HUD floats over the sky and should let it through;
+     a sheet is something you read, so it closes the sky off almost entirely. */
+  --panel: rgba(10, 14, 24, 0.82);
+  --panel-solid: rgba(9, 12, 21, 0.985);
+  --ink: #ece5d7;
+  --dim: rgba(236, 229, 215, 0.58);
+  --faint: rgba(236, 229, 215, 0.36);
+  --hair: rgba(236, 229, 215, 0.14);
+  --hair-strong: rgba(236, 229, 215, 0.26);
+  --accent: #e2673c;
+  --accent-ink: #080b13;
 
-  --r-sm: 10px;
-  --r: 14px;
-  --r-lg: 20px;
-  --r-xl: 26px;
+  /* Instrument corners. Anything softer starts looking like a weather widget. */
+  --r-sm: 3px;
+  --r: 5px;
+  --r-lg: 8px;
+  --r-xl: 12px;
   --pill: 999px;
 
   --tap: 44px;
   --shell-max: 460px;
 
+  --serif: 'Spectral', Georgia, 'Times New Roman', serif;
   --sans: 'Space Grotesk', system-ui, -apple-system, sans-serif;
   --mono: 'IBM Plex Mono', ui-monospace, Menlo, monospace;
 
@@ -71,11 +82,11 @@ button {
   color: var(--faint);
 }
 
+/* Flat ink, not frosted glass. A blur over a live camera feed costs a real
+   frame budget on a phone and mostly just muddies the sky behind it. */
 .glass {
-  background: var(--glass);
+  background: var(--panel);
   border: 1px solid var(--hair);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
 }
 
 /* Sky */
@@ -91,7 +102,7 @@ button {
 
 #camera {
   object-fit: cover;
-  background: #04060c;
+  background: #060910;
 }
 
 #sky {
@@ -141,11 +152,11 @@ button {
 }
 
 .pill span:last-child {
-  color: rgba(238, 242, 248, 0.88);
+  color: rgba(236, 229, 215, 0.9);
 }
 
 .pill.warn {
-  border-color: rgba(233, 169, 59, 0.4);
+  border-color: rgba(226, 103, 60, 0.45);
 }
 
 .pill.warn span:last-child {
@@ -185,7 +196,7 @@ button {
 }
 
 .navbtn[aria-pressed='true'] {
-  background: rgba(255, 255, 255, 0.07);
+  background: rgba(236, 229, 215, 0.08);
   color: var(--accent);
 }
 
@@ -199,6 +210,7 @@ button {
 /* Sheets */
 
 .sheet {
+  background: var(--panel-solid);
   position: absolute;
   left: 0;
   right: 0;
@@ -232,15 +244,16 @@ button {
   width: 38px;
   height: 4px;
   border-radius: 2px;
-  background: rgba(255, 255, 255, 0.22);
+  background: rgba(236, 229, 215, 0.22);
   flex: 0 0 auto;
 }
 
 .sheet h2 {
   margin: 18px 0 0;
-  font-size: 22px;
-  font-weight: 600;
-  letter-spacing: -0.015em;
+  font-family: var(--serif);
+  font-size: 27px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
 }
 
 .sheet-body {
@@ -294,6 +307,7 @@ button {
 /* Detail card */
 
 .card {
+  background: var(--panel-solid);
   position: absolute;
   left: 12px;
   right: 12px;
@@ -320,9 +334,10 @@ button {
 
 .card h1 {
   margin: 0;
-  font-size: 26px;
-  font-weight: 600;
-  letter-spacing: -0.015em;
+  font-family: var(--serif);
+  font-size: 31px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
 }
 
 .chip {
@@ -342,10 +357,18 @@ button {
   color: var(--accent-ink);
 }
 
+/* Fades at both ends so it reads as an engraved division rather than a
+   border that ran out of container. */
 .rule {
   height: 1px;
-  margin: 18px 0;
-  background: rgba(255, 255, 255, 0.09);
+  margin: 22px 0;
+  background: linear-gradient(
+    to right,
+    transparent,
+    rgba(236, 229, 215, 0.16) 12%,
+    rgba(236, 229, 215, 0.16) 88%,
+    transparent
+  );
 }
 
 .stats {
@@ -377,10 +400,17 @@ button {
   border: 0;
   border-radius: var(--r);
   background: transparent;
-  color: rgba(238, 242, 248, 0.55);
+  color: rgba(236, 229, 215, 0.55);
 }
 
 /* Controls */
+
+.row > div > b,
+.row > b {
+  font-family: var(--serif);
+  font-size: 17px;
+  font-weight: 500;
+}
 
 .row {
   display: flex;
@@ -405,7 +435,8 @@ button {
 }
 
 .field-head b {
-  font-size: 15px;
+  font-family: var(--serif);
+  font-size: 17px;
   font-weight: 500;
 }
 
@@ -417,7 +448,7 @@ button {
 
 .help {
   font-size: 12px;
-  color: rgba(238, 242, 248, 0.42);
+  color: rgba(236, 229, 215, 0.46);
 }
 
 input[type='range'] {
@@ -432,13 +463,13 @@ input[type='range'] {
 input[type='range']::-webkit-slider-runnable-track {
   height: 4px;
   border-radius: 2px;
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(236, 229, 215, 0.1);
 }
 
 input[type='range']::-moz-range-track {
   height: 4px;
   border-radius: 2px;
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(236, 229, 215, 0.1);
 }
 
 input[type='range']::-webkit-slider-thumb {
@@ -466,7 +497,7 @@ input[type='range']::-moz-range-thumb {
   height: 29px;
   border: 0;
   border-radius: var(--pill);
-  background: rgba(255, 255, 255, 0.13);
+  background: rgba(236, 229, 215, 0.13);
   padding: 0;
   transition: background 0.16s;
 }
@@ -532,7 +563,7 @@ input[type='range']::-moz-range-thumb {
   gap: 15px;
   padding: 14px 4px;
   border: 0;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  border-bottom: 1px solid rgba(236, 229, 215, 0.07);
   background: transparent;
   color: var(--ink);
   text-align: left;
@@ -544,7 +575,7 @@ input[type='range']::-moz-range-thumb {
 }
 
 .item[aria-pressed='true'] {
-  background: rgba(233, 169, 59, 0.1);
+  background: rgba(226, 103, 60, 0.12);
   border-radius: var(--r);
 }
 
@@ -557,14 +588,15 @@ input[type='range']::-moz-range-thumb {
 }
 
 .item-name b {
-  font-size: 16px;
-  font-weight: 600;
-  letter-spacing: -0.01em;
+  font-family: var(--serif);
+  font-size: 18px;
+  font-weight: 500;
+  letter-spacing: 0;
 }
 
 .item-name span {
   font-size: 12px;
-  color: rgba(238, 242, 248, 0.46);
+  color: rgba(236, 229, 215, 0.5);
 }
 
 .item-num {
@@ -583,7 +615,7 @@ input[type='range']::-moz-range-thumb {
 
 .item-num span {
   font-size: 11px;
-  color: rgba(238, 242, 248, 0.42);
+  color: rgba(236, 229, 215, 0.46);
 }
 
 /* Only the needle turns. Rotating the circle inflates its bounding box,
@@ -625,12 +657,12 @@ input[type='range']::-moz-range-thumb {
   padding: 0 14px;
   border: 1px solid var(--hair);
   border-radius: var(--r);
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(236, 229, 215, 0.05);
   flex: 0 0 auto;
 }
 
 .searchbar:focus-within {
-  border-color: rgba(233, 169, 59, 0.5);
+  border-color: rgba(226, 103, 60, 0.55);
 }
 
 .searchbar-icon {
@@ -654,7 +686,7 @@ input[type='range']::-moz-range-thumb {
 }
 
 .searchbar input::placeholder {
-  color: rgba(238, 242, 248, 0.34);
+  color: rgba(236, 229, 215, 0.34);
 }
 
 /* Safari draws its own clear button, which fights the border styling. */
@@ -667,9 +699,9 @@ input[type='range']::-moz-range-thumb {
 .cal-status {
   padding: 12px 14px;
   margin-bottom: 14px;
-  border: 1px solid rgba(233, 169, 59, 0.28);
+  border: 1px solid rgba(226, 103, 60, 0.32);
   border-radius: var(--r);
-  background: rgba(233, 169, 59, 0.07);
+  background: rgba(226, 103, 60, 0.08);
   font-size: 13px;
   line-height: 1.45;
   color: var(--ink);
@@ -678,6 +710,7 @@ input[type='range']::-moz-range-thumb {
 /* Toast */
 
 .toast {
+  background: var(--panel-solid);
   position: absolute;
   left: 12px;
   right: 12px;
@@ -709,7 +742,7 @@ input[type='range']::-moz-range-thumb {
   display: flex;
   flex-direction: column;
   padding: 60px max(24px, calc((100% - var(--shell-max)) / 2));
-  background: radial-gradient(120% 60% at 50% 0%, #0b1322 0%, #06090f 55%, #04060c 100%);
+  background: radial-gradient(120% 60% at 50% 0%, #0b1322 0%, #06090f 55%, #060910 100%);
   overflow-y: auto;
 }
 
@@ -718,7 +751,7 @@ input[type='range']::-moz-range-thumb {
 @media (hover: hover) and (pointer: fine) {
   .navbtn:hover {
     color: var(--ink);
-    background: rgba(255, 255, 255, 0.05);
+    background: rgba(236, 229, 215, 0.06);
   }
 
   .navbtn[aria-pressed='true']:hover {
@@ -727,25 +760,25 @@ input[type='range']::-moz-range-thumb {
 
   .iconbtn:hover {
     color: var(--ink);
-    background: rgba(255, 255, 255, 0.06);
+    background: rgba(236, 229, 215, 0.07);
   }
 
   .item:hover {
-    background: rgba(255, 255, 255, 0.04);
+    background: rgba(236, 229, 215, 0.05);
     border-radius: var(--r);
   }
 
   .primary:hover:not(:disabled) {
-    background: #f2b955;
+    background: #ef7bf;
   }
 
   .secondary:hover {
     border-color: var(--hair-strong);
-    background: rgba(255, 255, 255, 0.04);
+    background: rgba(236, 229, 215, 0.05);
   }
 
   .switch:hover {
-    background: rgba(255, 255, 255, 0.2);
+    background: rgba(236, 229, 215, 0.2);
   }
 
   .switch[aria-pressed='true']:hover {
@@ -753,6 +786,6 @@ input[type='range']::-moz-range-thumb {
   }
 
   input[type='range']::-webkit-slider-thumb:hover {
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5), 0 0 0 6px rgba(233, 169, 59, 0.16);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5), 0 0 0 6px rgba(226, 103, 60, 0.18);
   }
 }

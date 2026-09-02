@@ -175,7 +175,7 @@ export class SkyRenderer {
       const point = project(direction, basis, viewport);
       if (!point) continue;
 
-      ctx.fillStyle = label.length === 1 ? 'rgba(238,242,248,0.82)' : 'rgba(238,242,248,0.42)';
+      ctx.fillStyle = label.length === 1 ? 'rgba(236,229,215,0.85)' : 'rgba(236,229,215,0.46)';
       ctx.fillText(label, clampLabelX(ctx, label, point.x, this.width), point.y - 14);
     }
 
@@ -347,7 +347,7 @@ export class SkyRenderer {
       }
 
       if (options.showLabels) {
-        ctx.fillStyle = 'rgba(238, 242, 248, 0.78)';
+        ctx.fillStyle = 'rgba(236, 229, 215, 0.82)';
         ctx.fillText(
           object.name,
           clampLabelX(ctx, object.name, point.x, this.width),
@@ -382,7 +382,7 @@ export class SkyRenderer {
     ctx.arc(x, y, radius, 0, Math.PI * 2);
     ctx.clip();
 
-    ctx.fillStyle = 'rgba(6, 8, 14, 0.86)';
+    ctx.fillStyle = 'rgba(7, 10, 18, 0.88)';
     // The terminator is an ellipse whose width tracks the illuminated fraction;
     // which side is dark flips at full moon.
     const waxing = phase < 0.5;
@@ -415,7 +415,7 @@ export class SkyRenderer {
     if (!point) return;
 
     ctx.save();
-    ctx.strokeStyle = '#e9a93b';
+    ctx.strokeStyle = '#e2673c';
     ctx.lineWidth = 1.25;
 
     ctx.globalAlpha = 0.9;
@@ -449,7 +449,7 @@ export class SkyRenderer {
     const y = this.height / 2;
 
     ctx.save();
-    ctx.strokeStyle = 'rgba(238, 242, 248, 0.22)';
+    ctx.strokeStyle = 'rgba(236, 229, 215, 0.22)';
     ctx.lineWidth = 1;
 
     ctx.beginPath();
@@ -468,7 +468,7 @@ export class SkyRenderer {
       ctx.stroke();
     }
 
-    ctx.fillStyle = 'rgba(238, 242, 248, 0.5)';
+    ctx.fillStyle = 'rgba(236, 229, 215, 0.52)';
     ctx.beginPath();
     ctx.arc(x, y, 1.4, 0, Math.PI * 2);
     ctx.fill();
