@@ -34,3 +34,9 @@ Thumbs.db
 
 # Vercel CLI project link (machine-local, contains project + org ids)
 .vercel
+
+# Local secrets. .env.local holds a Vercel OIDC token.
+.env*
+
+# Agent scratch space and throwaway worktrees
+.claude/
