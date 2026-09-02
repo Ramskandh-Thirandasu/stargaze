@@ -44,8 +44,6 @@ Stars come from a catalogue containing their positions, magnitudes, colours, and
 
 I test the calculated positions against NASA JPL Horizons at several dates between 2021 and 2045.
 
-The current position errors from those tests are:
-
 Object	Error
 Sun	13.5 arcsec
 Mercury	21.7 arcsec
@@ -102,7 +100,7 @@ Then open http://localhost:5173.
 
 The current test suite has 118 passing tests.
 
-<details> <summary>Testing on a phone</summary>
+Testing on a phone
 
 Camera, location, and motion sensors require HTTPS in mobile browsers.
 
@@ -115,7 +113,7 @@ The server prints an HTTPS address that you can open from your phone.
 
 The local certificate isn't from a public certificate authority, so the browser will show a certificate warning the first time. That's expected for the development server.
 
-</details> <details> <summary>Building the Android app</summary>
+Building the Android app
 
 The Android version uses the same web application.
 
@@ -134,7 +132,6 @@ The debug APK is generated at:
 
 android/app/build/outputs/apk/debug/app-debug.apk
 
-</details>
 Project structure
 tools/       Scripts used to prepare the astronomy data
 
