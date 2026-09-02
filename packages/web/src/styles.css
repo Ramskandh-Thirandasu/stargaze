@@ -1,16 +1,8 @@
-/*
- * Design tokens, lifted from the StarGaze canvas.
- *
- * Everything is tuned for reading in the dark: near-black rather than pure
- * black (the camera feed sits behind it), warm-white text, and one amber
- * accent -- amber because it preserves dark adaptation, which is the whole
- * reason red light is standard in observatories.
- */
+/* StarGaze. Dark by necessity: this sits over a camera feed at night. */
 
 :root {
   --bg: #05070d;
   --glass: rgba(9, 13, 21, 0.58);
-  --glass-solid: rgba(9, 13, 21, 0.92);
   --hair: rgba(255, 255, 255, 0.11);
   --hair-strong: rgba(255, 255, 255, 0.18);
   --ink: #eef2f8;
@@ -19,14 +11,13 @@
   --accent: #e9a93b;
   --accent-ink: #06080e;
 
-  --radius-sm: 9px;
-  --radius: 15px;
-  --radius-lg: 20px;
-  --radius-xl: 26px;
+  --r-sm: 10px;
+  --r: 14px;
+  --r-lg: 20px;
+  --r-xl: 26px;
+  --pill: 999px;
 
   --tap: 44px;
-  /* Above phone width the chrome stops stretching edge-to-edge and becomes a
-     centered column instead -- the sky behind it still fills the whole window. */
   --shell-max: 460px;
 
   --sans: 'Space Grotesk', system-ui, -apple-system, sans-serif;
@@ -73,7 +64,7 @@ button {
 }
 
 .cap {
-  font-size: 9.5px;
+  font-size: 10px;
   font-weight: 600;
   letter-spacing: 0.18em;
   text-transform: uppercase;
@@ -83,13 +74,11 @@ button {
 .glass {
   background: var(--glass);
   border: 1px solid var(--hair);
-  backdrop-filter: blur(16px) saturate(125%);
-  -webkit-backdrop-filter: blur(16px) saturate(125%);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
 }
 
-/* ------------------------------------------------------------------ *
- * Sky
- * ------------------------------------------------------------------ */
+/* Sky */
 
 #camera,
 #sky {
@@ -106,12 +95,10 @@ button {
 }
 
 #sky {
-  touch-action: none; /* we handle drag and pinch ourselves */
+  touch-action: none; /* drag and pinch are handled in JS */
 }
 
-/* ------------------------------------------------------------------ *
- * Chrome
- * ------------------------------------------------------------------ */
+/* Chrome over the sky */
 
 .hud {
   position: absolute;
@@ -132,7 +119,7 @@ button {
 
 .compass {
   height: 60px;
-  border-radius: var(--radius);
+  border-radius: var(--r);
   overflow: hidden;
   flex: 0 0 auto;
 }
@@ -149,7 +136,7 @@ button {
   align-items: baseline;
   gap: 7px;
   padding: 6px 11px;
-  border-radius: var(--radius-sm);
+  border-radius: var(--r-sm);
   font-size: 12px;
 }
 
@@ -172,7 +159,7 @@ button {
 
 .navbar {
   height: 78px;
-  border-radius: var(--radius-lg);
+  border-radius: var(--r-lg);
   display: flex;
   align-items: center;
   justify-content: space-evenly;
@@ -186,13 +173,12 @@ button {
   align-items: center;
   justify-content: center;
   gap: 6px;
-  /* Four buttons across a 366px bar. Still a 44px+ touch target in both axes. */
-  min-width: 72px;
+  min-width: 72px; /* four across a phone, still a 44px+ target */
   flex: 1 1 0;
   height: 58px;
   padding: 0 8px;
   border: 0;
-  border-radius: 13px;
+  border-radius: var(--r);
   background: transparent;
   color: var(--dim);
   transition: color 0.15s, background 0.15s;
@@ -204,15 +190,13 @@ button {
 }
 
 .navbtn span {
-  font-size: 9.5px;
+  font-size: 10px;
   font-weight: 600;
   letter-spacing: 0.16em;
   text-transform: uppercase;
 }
 
-/* ------------------------------------------------------------------ *
- * Sheets and cards
- * ------------------------------------------------------------------ */
+/* Sheets */
 
 .sheet {
   position: absolute;
@@ -222,7 +206,7 @@ button {
   max-width: var(--shell-max);
   margin-inline: auto;
   max-height: 82vh;
-  border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+  border-radius: var(--r-xl) var(--r-xl) 0 0;
   border-bottom: 0;
   padding: 12px 22px calc(env(safe-area-inset-bottom, 0px) + 26px);
   display: flex;
@@ -232,56 +216,10 @@ button {
   z-index: 3;
 }
 
-/* Above phone width the sheet is a floating panel, not a screen-edge drawer. */
-@media (min-width: 560px) {
-  .sheet {
-    bottom: 16px;
-    border-radius: var(--radius-xl);
-    border-bottom: 1px solid var(--hair);
-    max-height: min(82vh, 640px);
-  }
-}
-
 .sheet[data-open='true'] {
   transform: translateY(0);
 }
 
-/* Tablet and wider: a side panel, not a bottom sheet -- there's enough width
-   for the sky to stay visible next to it rather than under it. */
-@media (min-width: 840px) {
-  .sheet {
-    left: auto;
-    right: 16px;
-    top: 16px;
-    bottom: 16px;
-    margin-inline: 0;
-    width: min(400px, 32vw);
-    max-width: none;
-    max-height: none;
-    border-radius: var(--radius-xl);
-    transform: translateX(110%);
-  }
-
-  .sheet[data-open='true'] {
-    transform: translateX(0);
-  }
-
-  /* A swipe handle implies a swipe-down-to-dismiss gesture, which a side
-     panel does not have -- Escape and the existing close controls do the
-     same job here. */
-  .sheet .grabber {
-    display: none;
-  }
-
-  /* The HUD would otherwise sit centered under the open side panel. Shifting
-     it into the remaining space keeps the compass and readouts clear of it. */
-  body:has(.sheet[data-open='true']) .hud {
-    margin-inline: auto calc(min(400px, 32vw) + 32px);
-  }
-}
-
-/* Tapping the sky also closes a sheet, but an open sheet covers most of a
-   phone screen -- this is the affordance you can actually see. */
 .sheet-close {
   position: absolute;
   top: 10px;
@@ -300,7 +238,7 @@ button {
 
 .sheet h2 {
   margin: 18px 0 0;
-  font-size: 21px;
+  font-size: 22px;
   font-weight: 600;
   letter-spacing: -0.015em;
 }
@@ -311,9 +249,49 @@ button {
   overscroll-behavior: contain;
   margin-top: 20px;
   flex: 1 1 auto;
-  /* Leave room for the scrollbar so a list row cannot push the sheet sideways. */
-  padding-right: 2px;
+  padding-right: 2px; /* room for the scrollbar */
 }
+
+/* Past phone width the sheet floats instead of hugging the bottom edge. */
+@media (min-width: 560px) {
+  .sheet {
+    bottom: 16px;
+    border-radius: var(--r-xl);
+    border-bottom: 1px solid var(--hair);
+    max-height: min(82vh, 640px);
+  }
+}
+
+/* Tablet: enough room to put the panel beside the sky rather than over it. */
+@media (min-width: 840px) {
+  .sheet {
+    left: auto;
+    right: 16px;
+    top: 16px;
+    bottom: 16px;
+    margin-inline: 0;
+    width: min(400px, 32vw);
+    max-width: none;
+    max-height: none;
+    border-radius: var(--r-xl);
+    transform: translateX(110%);
+  }
+
+  .sheet[data-open='true'] {
+    transform: translateX(0);
+  }
+
+  /* A side panel has no swipe-to-dismiss, so the handle would be a lie. */
+  .sheet .grabber {
+    display: none;
+  }
+
+  body:has(.sheet[data-open='true']) .hud {
+    margin-inline: auto calc(min(400px, 32vw) + 32px);
+  }
+}
+
+/* Detail card */
 
 .card {
   position: absolute;
@@ -322,7 +300,7 @@ button {
   max-width: calc(var(--shell-max) - 24px);
   margin-inline: auto;
   bottom: calc(env(safe-area-inset-bottom, 0px) + 20px);
-  border-radius: 22px;
+  border-radius: var(--r-lg);
   padding: 20px 20px 22px;
   z-index: 2;
   transform: translateY(calc(100% + 40px));
@@ -342,16 +320,16 @@ button {
 
 .card h1 {
   margin: 0;
-  font-size: 25px;
+  font-size: 26px;
   font-weight: 600;
   letter-spacing: -0.015em;
 }
 
 .chip {
   padding: 4px 9px;
-  border-radius: 999px;
+  border-radius: var(--pill);
   border: 1px solid var(--hair-strong);
-  font-size: 10.5px;
+  font-size: 11px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--dim);
@@ -397,14 +375,12 @@ button {
   height: var(--tap);
   padding: 0;
   border: 0;
-  border-radius: 12px;
+  border-radius: var(--r);
   background: transparent;
   color: rgba(238, 242, 248, 0.55);
 }
 
-/* ------------------------------------------------------------------ *
- * Controls
- * ------------------------------------------------------------------ */
+/* Controls */
 
 .row {
   display: flex;
@@ -412,9 +388,7 @@ button {
   justify-content: space-between;
   min-height: 46px;
   gap: 16px;
-  /* Rows that carry help text grow past the minimum height, and without this
-     their explanation runs straight into the next row's heading. */
-  padding: 8px 0;
+  padding: 8px 0; /* help text otherwise runs into the next row heading */
 }
 
 .field {
@@ -431,7 +405,7 @@ button {
 }
 
 .field-head b {
-  font-size: 14.5px;
+  font-size: 15px;
   font-weight: 500;
 }
 
@@ -442,7 +416,7 @@ button {
 }
 
 .help {
-  font-size: 11.5px;
+  font-size: 12px;
   color: rgba(238, 242, 248, 0.42);
 }
 
@@ -491,7 +465,7 @@ input[type='range']::-moz-range-thumb {
   width: 50px;
   height: 29px;
   border: 0;
-  border-radius: 999px;
+  border-radius: var(--pill);
   background: rgba(255, 255, 255, 0.13);
   padding: 0;
   transition: background 0.16s;
@@ -518,9 +492,34 @@ input[type='range']::-moz-range-thumb {
   background: var(--accent-ink);
 }
 
-/* ------------------------------------------------------------------ *
- * Tonight list
- * ------------------------------------------------------------------ */
+.primary {
+  width: 100%;
+  min-height: 58px;
+  border: 0;
+  border-radius: var(--r);
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.primary:disabled {
+  opacity: 0.4;
+}
+
+.secondary {
+  width: 100%;
+  min-height: 52px;
+  margin-top: 10px;
+  border: 1px solid var(--hair-strong);
+  border-radius: var(--r);
+  background: transparent;
+  color: var(--ink);
+  font-size: 15px;
+  font-weight: 500;
+}
+
+/* Tonight list */
 
 .list {
   display: flex;
@@ -544,6 +543,11 @@ input[type='range']::-moz-range-thumb {
   border-bottom: 0;
 }
 
+.item[aria-pressed='true'] {
+  background: rgba(233, 169, 59, 0.1);
+  border-radius: var(--r);
+}
+
 .item-name {
   flex-grow: 1;
   display: flex;
@@ -553,13 +557,13 @@ input[type='range']::-moz-range-thumb {
 }
 
 .item-name b {
-  font-size: 15.5px;
+  font-size: 16px;
   font-weight: 600;
   letter-spacing: -0.01em;
 }
 
 .item-name span {
-  font-size: 11.5px;
+  font-size: 12px;
   color: rgba(238, 242, 248, 0.46);
 }
 
@@ -582,6 +586,8 @@ input[type='range']::-moz-range-thumb {
   color: rgba(238, 242, 248, 0.42);
 }
 
+/* Only the needle turns. Rotating the circle inflates its bounding box,
+   which shoves the whole row sideways. */
 .arrow {
   display: flex;
   align-items: center;
@@ -592,8 +598,6 @@ input[type='range']::-moz-range-thumb {
   border-radius: 50%;
   border: 1px solid var(--hair);
   color: var(--accent);
-  /* The dial stays still; only the needle turns. Rotating the circle itself
-     also inflates its bounding box, which pushed the whole row sideways. */
   overflow: hidden;
 }
 
@@ -605,191 +609,12 @@ input[type='range']::-moz-range-thumb {
 .empty {
   padding: 40px 8px;
   text-align: center;
-  font-size: 13.5px;
+  font-size: 13px;
   color: var(--faint);
   line-height: 1.5;
 }
 
-/* ------------------------------------------------------------------ *
- * Permission gate
- * ------------------------------------------------------------------ */
-
-.gate {
-  position: absolute;
-  inset: 0;
-  z-index: 10;
-  background: radial-gradient(120% 60% at 50% 0%, #0b1322 0%, #06090f 55%, #04060c 100%);
-  display: flex;
-  flex-direction: column;
-  /* The gradient stays full-bleed; the text column caps out at --shell-max by
-     growing the side padding once the window is wider than a phone. */
-  padding-top: calc(env(safe-area-inset-top, 0px) + 60px);
-  padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 30px);
-  padding-inline: max(24px, calc((100% - var(--shell-max)) / 2));
-  overflow-y: auto;
-}
-
-.wordmark {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.28em;
-  text-transform: uppercase;
-  color: rgba(238, 242, 248, 0.82);
-}
-
-.gate h1 {
-  margin: 30px 0 0;
-  font-size: 33px;
-  line-height: 1.14;
-  font-weight: 600;
-  letter-spacing: -0.025em;
-  text-wrap: balance;
-}
-
-.gate p.lede {
-  margin: 14px 0 0;
-  font-size: 14.5px;
-  line-height: 1.55;
-  color: rgba(238, 242, 248, 0.58);
-  text-wrap: pretty;
-}
-
-.perms {
-  margin-top: 26px;
-  border-radius: var(--radius-lg);
-  padding: 4px 18px;
-}
-
-.perm {
-  display: flex;
-  align-items: flex-start;
-  gap: 14px;
-  padding: 16px 0;
-}
-
-.perm + .perm {
-  border-top: 1px solid rgba(255, 255, 255, 0.07);
-}
-
-.perm-icon {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex: 0 0 40px;
-  width: 40px;
-  height: 40px;
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  color: var(--dim);
-}
-
-.perm-text {
-  flex-grow: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.perm-text b {
-  font-size: 15px;
-  font-weight: 600;
-}
-
-.perm-text span {
-  font-size: 12.5px;
-  line-height: 1.45;
-  color: rgba(238, 242, 248, 0.56);
-  text-wrap: pretty;
-}
-
-.status {
-  flex: 0 0 auto;
-  margin-top: 3px;
-  padding: 4px 10px;
-  border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  font-size: 9.5px;
-  font-weight: 600;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: rgba(238, 242, 248, 0.52);
-  white-space: nowrap;
-}
-
-.status[data-state='granted'] {
-  background: var(--accent);
-  border-color: transparent;
-  color: var(--accent-ink);
-}
-
-.status[data-state='denied'] {
-  border-color: rgba(255, 122, 92, 0.5);
-  color: #ff9d85;
-}
-
-.primary {
-  width: 100%;
-  min-height: 58px;
-  border: 0;
-  border-radius: 17px;
-  background: var(--accent);
-  color: var(--accent-ink);
-  font-size: 16px;
-  font-weight: 600;
-}
-
-.secondary {
-  width: 100%;
-  min-height: 52px;
-  margin-top: 10px;
-  border: 1px solid var(--hair-strong);
-  border-radius: var(--radius);
-  background: transparent;
-  color: var(--ink);
-  font-size: 14.5px;
-  font-weight: 500;
-}
-
-.footnote {
-  margin: 16px 0 0;
-  text-align: center;
-  font-size: 11.5px;
-  line-height: 1.5;
-  color: rgba(238, 242, 248, 0.38);
-  text-wrap: pretty;
-}
-
-.toast {
-  position: absolute;
-  left: 12px;
-  right: 12px;
-  max-width: calc(var(--shell-max) - 24px);
-  margin-inline: auto;
-  bottom: calc(env(safe-area-inset-bottom, 0px) + 112px);
-  padding: 12px 16px;
-  border-radius: var(--radius);
-  font-size: 12.5px;
-  line-height: 1.45;
-  color: var(--dim);
-  z-index: 4;
-  opacity: 0;
-  transform: translateY(8px);
-  transition: opacity 0.2s, transform 0.2s;
-  pointer-events: none;
-}
-
-.toast[data-open='true'] {
-  opacity: 1;
-  transform: translateY(0);
-}
-
-/* ------------------------------------------------------------------ *
- * Search
- * ------------------------------------------------------------------ */
+/* Search */
 
 .searchbar {
   display: flex;
@@ -799,7 +624,7 @@ input[type='range']::-moz-range-thumb {
   margin-top: 16px;
   padding: 0 14px;
   border: 1px solid var(--hair);
-  border-radius: 14px;
+  border-radius: var(--r);
   background: rgba(255, 255, 255, 0.04);
   flex: 0 0 auto;
 }
@@ -832,42 +657,64 @@ input[type='range']::-moz-range-thumb {
   color: rgba(238, 242, 248, 0.34);
 }
 
-/* Safari draws its own clear button, which collides with the glass styling. */
+/* Safari draws its own clear button, which fights the border styling. */
 .searchbar input::-webkit-search-cancel-button {
   -webkit-appearance: none;
 }
 
-/* ------------------------------------------------------------------ *
- * Calibration
- * ------------------------------------------------------------------ */
+/* Calibration */
 
 .cal-status {
   padding: 12px 14px;
   margin-bottom: 14px;
   border: 1px solid rgba(233, 169, 59, 0.28);
-  border-radius: 12px;
+  border-radius: var(--r);
   background: rgba(233, 169, 59, 0.07);
   font-size: 13px;
   line-height: 1.45;
   color: var(--ink);
 }
 
-.item[aria-pressed='true'] {
-  background: rgba(233, 169, 59, 0.1);
-  border-radius: 12px;
+/* Toast */
+
+.toast {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  max-width: calc(var(--shell-max) - 24px);
+  margin-inline: auto;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 112px);
+  padding: 12px 16px;
+  border-radius: var(--r);
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--dim);
+  z-index: 4;
+  opacity: 0;
+  transform: translateY(8px);
+  transition: opacity 0.2s, transform 0.2s;
+  pointer-events: none;
 }
 
-.primary:disabled {
-  opacity: 0.4;
+.toast[data-open='true'] {
+  opacity: 1;
+  transform: translateY(0);
 }
 
-/* ------------------------------------------------------------------ *
- * Pointer feedback
- *
- * Gated to devices that actually have a hover-capable pointer, so a tap on
- * touch/Android never leaves a button stuck in its hover state.
- * ------------------------------------------------------------------ */
+/* Backdrop for the catalogue-failed-to-load message. */
+.gate {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  padding: 60px max(24px, calc((100% - var(--shell-max)) / 2));
+  background: radial-gradient(120% 60% at 50% 0%, #0b1322 0%, #06090f 55%, #04060c 100%);
+  overflow-y: auto;
+}
 
+/* Hover states only where a pointer can actually hover, otherwise a tap
+   leaves the button stuck looking hovered. */
 @media (hover: hover) and (pointer: fine) {
   .navbtn:hover {
     color: var(--ink);
@@ -885,7 +732,7 @@ input[type='range']::-moz-range-thumb {
 
   .item:hover {
     background: rgba(255, 255, 255, 0.04);
-    border-radius: 12px;
+    border-radius: var(--r);
   }
 
   .primary:hover:not(:disabled) {
