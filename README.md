@@ -1,7 +1,7 @@
 # StarGaze
 
 <p align="center">
-  <img src="store/cover.png" alt="StarGaze" width="100%">
+  <img src="https://raw.githubusercontent.com/Ramskandh-Thirandasu/stargaze/refs/heads/main/docs/cover.png" alt="StarGaze" width="100%">
 </p>
 
 **Point your phone at the night sky and it tells you what you're looking at.**
@@ -10,11 +10,11 @@
 browser, installs like an app, and keeps working with no signal
 
 <p align="center">
-  <img src="store/screenshots/phone/1-sky.png" alt="The sky view: constellation figures, a compass strip, and readouts showing where the phone is pointed" width="300">
-  <img src="store/screenshots/phone/2-tonight.png" alt="The Tonight list, ordered by what is actually visible right now" width="300">
+  <img src="https://raw.githubusercontent.com/Ramskandh-Thirandasu/stargaze/refs/heads/main/docs/phone-sky.png" alt="The sky view: constellation figures, a compass strip, and readouts showing where the phone is pointed" width="300">
+  <img src="https://raw.githubusercontent.com/Ramskandh-Thirandasu/stargaze/refs/heads/main/docs/phone-tonight.png" alt="The Tonight list, ordered by what is actually visible right now" width="300">
 </p>
 <p align="center">
-  <img src="store/screenshots/tablet-10in/1-sky.png" alt="The same app on a tablet, where the panels sit beside the sky rather than over it" width="620">
+  <img src="https://raw.githubusercontent.com/Ramskandh-Thirandasu/stargaze/refs/heads/main/docs/tablet-sky.png" alt="The same app on a tablet, where the panels sit beside the sky rather than over it" width="640">
 </p>
 
 You've probably looked up, seen something bright, and wondered what it was.
