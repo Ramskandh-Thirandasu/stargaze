@@ -4,9 +4,9 @@
   <img src="https://raw.githubusercontent.com/Ramskandh-Thirandasu/stargaze/refs/heads/main/docs/cover.png" alt="StarGaze" width="100%">
 </p>
 
-Point your phone at the sky and StarGaze tells you which star, planet or constellation you are looking at. It runs in the browser, installs as a PWA, and keeps working with no signal.
+Point your phone at the sky and StarGaze tells you what you're looking at. It runs in the browser, installs like an app, and keeps working with no signal.
 
-Live version: https://ramskandh-thirandasu.github.io/stargaze/
+Try it: https://ramskandh-thirandasu.github.io/stargaze/
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/Ramskandh-Thirandasu/stargaze/refs/heads/main/docs/phone-sky.png" alt="StarGaze sky view" width="300">
@@ -18,39 +18,36 @@ Live version: https://ramskandh-thirandasu.github.io/stargaze/
 
 ## What it does
 
-- Live sky view with all 88 constellation figures drawn
-- 1,009 stars down to magnitude 4.5, the five naked-eye planets, and the Moon with its current phase
-- Camera mode, which draws the labels over the live camera feed
-- Works offline once the service worker has cached it
-- Compass calibration, because phone compasses are usually wrong by several degrees
-- Search by name, and a Tonight list of what is above the horizon right now
-- Drag mode, for looking around on a laptop with no sensors involved
+- 1,009 stars down to magnitude 4.5, all 88 constellations, the five naked-eye planets, and the Moon with its phase
+- A camera mode that draws the labels over the live camera feed
+- Compass calibration, because phone compasses are usually a few degrees off
+- Search by name, and a Tonight list of what's above the horizon right now
+- Drag mode, so you can look around on a laptop with no sensors
+- Works offline
 
 ## How it works
 
-There is no image recognition in this project. I tried that first and gave up on it. A phone photo of the night sky is close to a black rectangle with a few dots in it, so there is very little in the frame to match against, and it gets worse under light pollution, which is exactly when you want the help.
+There's no image recognition here. I tried that first and gave up on it. A phone photo of the night sky is basically a black rectangle with a few dots in it, so there's almost nothing to match against, and it gets worse under light pollution, which is exactly when you want the help.
 
-The app computes positions instead. It needs three things:
+So it calculates instead. Three inputs:
 
-1. Where you are, from GPS. The sky over India is not the sky over Iceland.
-2. What time it is. The sky rotates about 15 degrees per hour.
-3. Which way the phone is pointing, from the magnetometer and the accelerometer.
+1. Where you are, from GPS. The sky over India isn't the sky over Iceland.
+2. The time. The sky turns about 15 degrees an hour.
+3. Which way the phone is pointing, from the compass and accelerometer.
 
-Given those, the star catalogue and some spherical trigonometry give you the altitude and azimuth of every object. That is the whole idea. It is exact, it is fast, and it needs no network.
+Feed those into the star catalogue and some spherical trigonometry and you get the altitude and azimuth of every object. That's the whole idea. It's fast, it's exact, and it needs no network.
 
-Everything runs on the device. There is no server and no account, so your location and camera never leave your phone.
+All of it runs on the device, so your location and camera never leave your phone. There's no server and no account.
 
-## Why you might not want it
+## What it doesn't do
 
-The limits are real, so they are worth stating.
+- The compass is the weak point. Phone magnetometers are usually 5 to 15 degrees off, which is 10 to 30 Moon widths. That's what the calibration screen is for, but you have to use it.
+- Metal and electronics make it worse. Indoors or in a car the heading can be badly wrong. The app warns you when the readings look unstable, but it can't fix them.
+- Magnitude 4.5 isn't many stars. Enough to find the constellations and planets. If you want galaxies and nebulae, use Stellarium.
+- On iOS you have to tap the page once before motion works. Safari won't grant the orientation permission without a gesture.
+- Uranus and Neptune are calculated and tested, but never drawn. They're too faint to see, and a label over empty sky just makes you distrust the rest.
 
-- The compass is the weak link. Phone magnetometers are typically off by 5 to 15 degrees, which is 10 to 30 Moon widths. The calibration screen exists to correct that, but you have to actually use it.
-- Metal and electronics throw the heading off badly. Indoors, in a car, or next to a laptop it can be wildly wrong. The app warns you when the readings look unstable, but it cannot fix them.
-- Magnitude 4.5 is not a lot of stars. 1,009 is enough to recognise the constellations and find the planets. If you want galaxies and nebulae, use Stellarium.
-- iOS needs a tap before motion works. Safari requires a user gesture to grant the orientation permission, so the sky does not track until you interact with the page.
-- Uranus and Neptune are computed and tested, but never drawn. They are too faint to pick out by eye, and a label floating over blank sky teaches you to distrust everything else on screen.
-
-That last one is a rule throughout: nothing is silently hidden. Objects above the horizon but washed out by daylight or a bright Moon are drawn dimmed and labelled rather than removed. Knowing something is up there but invisible is more useful than the marker quietly disappearing.
+That last one is a rule I stuck to: nothing disappears silently. Things that are up but washed out by daylight or a bright Moon get dimmed and labelled instead of removed.
 
 ## Running it
 
@@ -60,19 +57,17 @@ npm test
 npm run dev
 ```
 
-`npm test` runs 118 tests in `packages/core`. Nine further tests in `live-verify.test.ts` are skipped by default because they fetch from JPL Horizons over the network.
+`npm test` runs 118 tests in `packages/core`. Nine more in `live-verify.test.ts` are skipped by default because they hit JPL Horizons over the network. `npm run dev` serves on http://localhost:5173.
 
-`npm run dev` serves on http://localhost:5173.
+### On a real phone
 
-### Testing on a real phone
-
-Mobile browsers only expose the camera, geolocation and motion sensors over https. On plain http they fail silently: no permission prompt appears, nothing is logged, and the page just sits there. This took me an embarrassing amount of time to work out, so it is worth stating plainly.
+Mobile browsers only give you camera, GPS and motion over https, and on plain http they fail silently. No permission prompt, nothing logged, the page just sits there. This took me way too long to figure out.
 
 ```bash
 npm run serve
 ```
 
-That builds the app and starts the local https server, which prints the LAN address to open on your phone. Your phone will warn about the self-signed certificate the first time. Accept it.
+That builds the app and starts a local https server, which prints the address to open on your phone. Your phone will complain about the certificate once. Accept it.
 
 ### Android
 
@@ -81,21 +76,17 @@ npm run android:sync
 npm run android:open
 ```
 
-Requires JDK 21. Newer JDKs fail with `Unsupported class file major version`, including the JDK bundled inside Android Studio, which is a confusing way to lose an evening. The debug APK is written to `android/app/build/outputs/apk/debug/app-debug.apk`.
+Needs JDK 21. Newer ones fail with `Unsupported class file major version`, including the JDK inside Android Studio, which is a confusing way to lose an evening. The APK lands in `android/app/build/outputs/apk/debug/app-debug.apk`.
 
 ### Rebuilding the star data
 
-```bash
-npm run data
-```
-
-This runs the Python scripts in `tools/`, which fetch the source catalogues and regenerate the JSON in `packages/web/public/data/`. You only need it to change the magnitude limit or pull newer source data. The generated files are committed, so a normal build never touches Python.
+`npm run data` runs the Python scripts in `tools/` to regenerate the JSON in `packages/web/public/data/`. You only need it to change the magnitude limit or pull newer source data. The generated files are committed, so a normal build never touches Python.
 
 ## Accuracy
 
-The positional maths is far more accurate than the hardware it runs on, so in practice the compass limits you, not the astronomy.
+The maths is much more accurate than the hardware, so the compass is what limits you, not the astronomy.
 
-Positions are checked automatically against [JPL Horizons](https://ssd.jpl.nasa.gov/horizons/) at six dates spanning 2021 to 2045. Errors are in arcseconds, where one arcsecond is 1/3600 of a degree. The full Moon is roughly 1,800 arcseconds across.
+Positions are checked against [JPL Horizons](https://ssd.jpl.nasa.gov/horizons/) at six dates between 2021 and 2045. Errors are in arcseconds, where an arcsecond is 1/3600 of a degree. The full Moon is about 1,800 arcseconds across.
 
 | Object | Max error | Object | Max error |
 |---|---|---|---|
@@ -105,25 +96,23 @@ Positions are checked automatically against [JPL Horizons](https://ssd.jpl.nasa.
 | Mars | 31.7" | Neptune | 34.4" |
 | Moon | 16.5" | | |
 
-Uranus and Neptune are tested but never drawn, as above.
-
-The worst of those is Saturn, at about a quarter of a Moon width. A compass error of 5 to 15 degrees is 18,000 to 54,000 arcseconds, so the hardware error is two orders of magnitude larger than anything the ephemeris contributes. That ratio is why calibration got built before any extra catalogue data did.
+The worst is Saturn, at about a quarter of a Moon width. A compass that's 5 to 15 degrees off is 18,000 to 54,000 arcseconds, so the hardware error is hundreds of times bigger than anything the maths adds. That's why I built calibration before adding more catalogue data.
 
 ## Project layout
 
 ```
 tools/          Python scripts that build the catalogue JSON. Not shipped in the app.
-packages/core/  Astronomy maths: coordinates, ephemeris, visibility, pointing. 118 tests.
-packages/web/   The app itself, plus the generated data in public/data.
-server/         Local https server, used only for testing on a phone.
+packages/core/  The astronomy: coordinates, ephemeris, visibility, pointing. 118 tests.
+packages/web/   The app, plus the generated data in public/data.
+server/         Local https server, only used for testing on a phone.
 android/        Capacitor wrapper around the same web build.
 ```
 
-`packages/core` has no DOM dependencies, which is what makes the maths testable on its own. That split was the first decision I made and the one I would keep.
+`packages/core` has no DOM dependencies, which is what makes the maths testable on its own. That split was the first decision I made and the one I'd keep.
 
 ## Data sources
 
-The catalogues below are compiled into the app at build time by the scripts in `tools/`. None of them are contacted at runtime. All are free to use, and the same list appears in the app's about screen.
+These are compiled into the app at build time by the scripts in `tools/`. None of them are contacted at runtime. All are free to use, and the same list is in the app's about screen.
 
 | Data | Source |
 |---|---|
@@ -132,13 +121,13 @@ The catalogues below are compiled into the app at build time by the scripts in `
 | Planetary orbital elements | [NASA JPL, Approximate Positions of the Planets](https://ssd.jpl.nasa.gov/planets/approx_pos.html), public domain |
 | Magnetic declination | [IGRF-14](https://www.ngdc.noaa.gov/IAGA/vmod/igrf.html), IAGA Working Group V-MOD via NOAA NCEI |
 
-Gzipped, the whole data set is about 57 KB, which is what makes shipping it offline practical. Reference positions used to test the astronomy come from [JPL Horizons](https://ssd.jpl.nasa.gov/horizons/).
+Gzipped the whole data set is about 57 KB, which is what makes shipping it offline practical. The reference positions used in the tests come from [JPL Horizons](https://ssd.jpl.nasa.gov/horizons/).
 
 ## AI usage
 
-I designed and built this project myself. The architecture, the positioning maths, the sensor handling, the rendering and the test setup are my work. I read the JPL documentation and the source catalogue formats, made the technical decisions, and did the debugging.
+I designed and built this myself. The architecture, the positioning maths, the sensor handling, the rendering and the tests are my work. I read the JPL documentation and the catalogue formats, made the decisions, and did the debugging.
 
-I used an AI coding assistant during development, mainly for navigating the codebase and for routine edits. It sped me up. It did not design the app, and I can explain any part of it.
+I used an AI coding assistant along the way, mostly for moving around the codebase and routine edits. It made me faster. It didn't design the app, and I can explain any part of it.
 
 ## License
 
