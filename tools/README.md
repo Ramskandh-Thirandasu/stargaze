@@ -28,10 +28,11 @@ python tools/build_stars.py
 | `stars.json` | 19 KB | 1,009 stars to magnitude 4.5 — parallel arrays incl. proper motion, brightest first |
 | `names.json` | 13 KB | 929 designations, 291 proper names, distances |
 | `constellations.json` | 5 KB | 88 IAU figures, 843 segments, as HIP polylines |
+| `deepsky.json` | 1 KB | 29 Messier objects to magnitude 6 — position, type, magnitude, both axes |
 | `planets.json` | 1 KB | Keplerian elements + per-century rates for 8 planets |
 | `declination.json` | 19 KB | 35×72 grid: declination + yearly rate + total field intensity |
 
-**~57 KB gzipped for the entire photographable sky.** Small enough that the
+**~58 KB gzipped for the entire photographable sky.** Small enough that the
 service worker precaches all of it without thinking about it.
 
 ## Sources
@@ -40,10 +41,11 @@ service worker precaches all of it without thinking about it.
 |---|---|---|
 | Star positions, magnitudes, B−V, names | [HYG v4.0](https://github.com/astronexus/HYG-Database) (Hipparcos/Yale/Gliese) | CC BY-SA 4.0 |
 | Constellation figures | [Stellarium](https://github.com/Stellarium/stellarium) sky culture `modern_iau` | CC BY-SA 4.0 |
+| Deep-sky objects (Messier) | [OpenNGC](https://github.com/mattiaverga/OpenNGC) — Mattia Verga | CC BY-SA 4.0 |
 | Planetary elements | [JPL SSD, *Approximate Positions of the Planets*](https://ssd.jpl.nasa.gov/planets/approx_pos.html) | Public domain (US Gov) |
 | Magnetic declination | [IGRF-14](https://www.ngdc.noaa.gov/IAGA/vmod/coeffs/igrf14coeffs.txt) coefficients | Free use (IAGA) |
 
-All four are free to use. Credits live in `NOTICE.md` at the repo root; show
+All five are free to use. Credits live in `NOTICE.md` at the repo root; show
 that list in the app's about screen.
 
 ## Notes on each build
@@ -66,6 +68,25 @@ brightest, so a double doesn't draw as two overlapping dots. One star needs an
 explicit patch: HYG carries ξ Ursae Majoris without a Hipparcos number (it files
 it under Gliese 423), so `HD_TO_HIP` in `sources.py` rejoins the two — otherwise
 Ursa Major, of all things, draws with a gap.
+
+### `build_deepsky.py`
+The Messier catalogue, cut at **magnitude 6.0** — the classic naked-eye limit
+under a dark sky. That is a magnitude and a half past where the star catalogue
+stops, and deliberately so: the full list of 110 is a telescope target list, and
+a marker drawn over a magnitude 11 galaxy is a label over blank sky. 29 objects
+survive the cut. The app gates them further against the user's own magnitude
+setting, the same way it gates stars.
+
+Positions come as sexagesimal strings and are converted here; the sign has to
+come off the declination before the field split, or `-00:49:23` parses as
+*north* of the equator. Sizes ship as **both** axes — M31 is 178′ × 70′, and
+rendering it as a circle would be wrong by a factor of three.
+
+OpenNGC files M102 as a duplicate row pointing at M101, which is the modern
+reading of a 250-year-old bookkeeping error, so the catalogue holds 109
+distinct objects rather than 110. It also lists common names alphabetically,
+which puts the French name for M11 ahead of "Wild Duck Cluster";
+`MESSIER_NAMES` in `sources.py` overrides that one entry.
 
 ### `build_planets.py`
 Scraped from JPL rather than transcribed by hand: one mistyped digit in a

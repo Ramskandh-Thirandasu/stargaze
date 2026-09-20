@@ -12,6 +12,7 @@ import time
 
 import build_constellations
 import build_declination
+import build_deepsky
 import build_planets
 import build_stars
 from common import DATA_DIR, ROOT, log
@@ -19,6 +20,7 @@ from common import DATA_DIR, ROOT, log
 STEPS = [
     ("stars", build_stars.main),
     ("constellations", build_constellations.main),
+    ("deepsky", build_deepsky.main),
     ("planets", build_planets.main),
     ("declination", build_declination.main),
 ]

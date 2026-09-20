@@ -27,6 +27,8 @@ USER_AGENT = "stargaze-source-check/1.0"
 SOURCES = {
     "hyg": "https://raw.githubusercontent.com/astronexus/HYG-Database/main/hyg/CURRENT/hygdata_v40.csv.gz",
     "stellarium_modern_iau": "https://raw.githubusercontent.com/Stellarium/stellarium/master/skycultures/modern_iau/index.json",
+    "openngc": "https://raw.githubusercontent.com/mattiaverga/OpenNGC/master/database_files/NGC.csv",
+    "openngc_addendum": "https://raw.githubusercontent.com/mattiaverga/OpenNGC/master/database_files/addendum.csv",
 }
 
 
