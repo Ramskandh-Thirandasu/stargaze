@@ -15,11 +15,14 @@ import './styles.css';
 
 import {
   basisFromDeviceOrientation,
+  boundsFromYears,
+  clampOffset,
   HeadingFilter,
   isCalibrationStale,
   magneticFieldIntensity,
   normalize360,
   type CameraBasis,
+  type ClockBounds,
   type Viewport,
 } from '@stargaze/core';
 
@@ -153,7 +156,11 @@ class StarGaze {
   };
 
   private lastSkyUpdate = 0;
+  /** How far the shown sky is from the present. Deliberately not part of
+   *  Settings: this one resets on every launch -- see setTimeOffset. */
   private timeOffsetMs = 0;
+  /** True when the last scrub ran into the end of the ephemeris. */
+  private atClockLimit = false;
 
   /** The object being sighted during compass calibration, if any. */
   private calibrationTarget: TonightEntry | null = null;
@@ -809,15 +816,38 @@ class StarGaze {
       this.shell.toast('Location updated.', 2400);
     });
 
-    s.timeInput.addEventListener('input', () => {
-      // Hours from now, so you can wind the sky forward and see what rises.
-      const hours = Number(s.timeInput.value);
-      this.timeOffsetMs = hours * 3600000;
-      s.timeValue.textContent = hours === 0 ? 'now' : `${hours > 0 ? '+' : ''}${hours}h`;
-      this.updateSky(true);
+    const bounds = this.clockBounds();
+    s.wireTime({
+      bounds: { earliest: new Date(bounds.earliestMs), latest: new Date(bounds.latestMs) },
+      onScrub: (delta) => this.setTimeOffset(this.timeOffsetMs + delta),
+      onPick: (when) => this.setTimeOffset(when.getTime() - Date.now()),
+      onNow: () => this.setTimeOffset(0),
     });
 
     this.wirePermissionRecovery();
+  }
+
+  /* ---------------------------------------------------------------- *
+   * Time travel
+   * ---------------------------------------------------------------- */
+
+  /** The years the planetary theory is fit for, straight from planets.json. */
+  private clockBounds(): ClockBounds {
+    return boundsFromYears(this.data.planets.validFrom, this.data.planets.validTo);
+  }
+
+  /**
+   * Move the shown moment.
+   *
+   * Never saved. Someone who scrubbed to next Tuesday and closed the app has
+   * to get the real sky back when they open it again -- a remembered offset
+   * is a wrong overlay that looks exactly like a right one.
+   */
+  private setTimeOffset(offsetMs: number): void {
+    const clamped = clampOffset(offsetMs, Date.now(), this.clockBounds());
+    this.atClockLimit = clamped !== offsetMs;
+    this.timeOffsetMs = clamped;
+    this.updateSky(true);
   }
 
   /**
@@ -892,6 +922,7 @@ class StarGaze {
       this.settings.magnitudeLimit,
       this.settings.refraction,
     );
+    this.shell.showTime(this.frame.when, this.timeOffsetMs, this.atClockLimit);
     this.updateMagneticInterference();
   }
 

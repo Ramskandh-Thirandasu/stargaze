@@ -6,7 +6,15 @@
  * the only thing redrawing at 60fps, and it is not part of the DOM.
  */
 
-import { normalize360, type CameraBasis } from '@stargaze/core';
+import {
+  DAY_MS,
+  formatOffset,
+  HOUR_MS,
+  isPresent,
+  normalize360,
+  scrubRate,
+  type CameraBasis,
+} from '@stargaze/core';
 
 import type { ObjectDetail, SkyFrame, TonightEntry } from './sky.js';
 
@@ -39,6 +47,17 @@ export const icons = {
   ),
 };
 
+export interface TimeHandlers {
+  /** The window the ephemeris is fit for, for the date picker's own limits. */
+  bounds: { earliest: Date; latest: Date };
+  /** Move the shown moment by this many milliseconds. */
+  onScrub(deltaMs: number): void;
+  /** Show this exact moment instead. */
+  onPick(when: Date): void;
+  /** Back to the present. */
+  onNow(): void;
+}
+
 export interface Shell {
   canvas: HTMLCanvasElement;
   video: HTMLVideoElement;
@@ -58,8 +77,6 @@ export interface Shell {
   magValue: HTMLElement;
   fovInput: HTMLInputElement;
   fovValue: HTMLElement;
-  timeInput: HTMLInputElement;
-  timeValue: HTMLElement;
   linesToggle: HTMLButtonElement;
   labelsToggle: HTMLButtonElement;
   horizonToggle: HTMLButtonElement;
@@ -77,6 +94,9 @@ export interface Shell {
 
   fatal(title: string, detail: string): void;
   toast(text: string, ms?: number): void;
+  wireTime(handlers: TimeHandlers): void;
+  /** Say which moment the sky is drawn for, and how far that is from now. */
+  showTime(when: Date, offsetMs: number, atLimit: boolean): void;
   updateHud(basis: CameraBasis, frame: SkyFrame, mode: string, magneticInterference: boolean): void;
   openCard(detail: ObjectDetail): void;
   closeCard(): void;
@@ -112,6 +132,11 @@ export function buildShell(root: HTMLElement): Shell {
     <video id="camera" playsinline muted autoplay style="display:none"></video>
     <canvas id="sky"></canvas>
 
+    <!-- Lit only while the sky on screen is not the sky outside. Deliberately
+         impossible to miss from the corner of an eye: the failure this guards
+         against is walking outside still believing the overlay. -->
+    <div class="timeframe" id="timeframe" data-open="false"></div>
+
     <div class="hud">
       <div class="compass glass">
         <svg id="compass-svg" viewBox="0 0 366 60" preserveAspectRatio="none" width="100%" height="60"></svg>
@@ -122,6 +147,22 @@ export function buildShell(root: HTMLElement): Shell {
         <div class="pill glass" id="decl-pill"><span class="cap">Dec</span><span class="mono" id="decl">—</span></div>
       </div>
       <div class="spacer"></div>
+      <div class="timebar glass" id="timebar" data-travelling="false">
+        <div class="timerow">
+          <button class="timestep mono" id="time-day-back" type="button" aria-label="Back one day">−1d</button>
+          <button class="timestep mono" id="time-hour-back" type="button" aria-label="Back one hour">−1h</button>
+          <label class="timepick">
+            <span class="cap" id="time-tag">Showing now</span>
+            <span class="mono" id="time-value">—</span>
+            <input type="datetime-local" id="time-date" aria-label="Show the sky at a date and time" />
+          </label>
+          <button class="timestep mono" id="time-hour-fwd" type="button" aria-label="Forward one hour">+1h</button>
+          <button class="timestep mono" id="time-day-fwd" type="button" aria-label="Forward one day">+1d</button>
+        </div>
+        <input class="jog" type="range" id="time" min="-1" max="1" step="0.01" value="0"
+          aria-label="Scrub the sky backwards and forwards" />
+        <button class="timereset" id="btn-now" type="button">Back to now</button>
+      </div>
       <div class="navbar glass">
         <button class="navbtn" id="btn-search" type="button">${icons.search}<span>Search</span></button>
         <button class="navbtn" id="btn-tonight" type="button">${icons.tonight}<span>Tonight</span></button>
@@ -282,15 +323,6 @@ export function buildShell(root: HTMLElement): Shell {
         </div>
 
         <div style="margin-top:24px;padding-top:20px;border-top:1px solid rgba(255,255,255,0.08)">
-          <span class="cap">Time travel</span>
-          <div class="field">
-            <div class="field-head"><b>Offset from now</b><span id="time-value">now</span></div>
-            <input type="range" id="time" min="-12" max="12" step="1" value="0" />
-            <span class="help">Wind the sky forward to see what rises later.</span>
-          </div>
-        </div>
-
-        <div style="margin-top:24px;padding-top:20px;border-top:1px solid rgba(255,255,255,0.08)">
           <span class="cap">Credits</span>
           <p class="help" style="line-height:1.6;margin-top:10px">
             Star positions, magnitudes, colours and names: <a href="https://github.com/astronexus/HYG-Database" target="_blank" rel="noopener">HYG Database v4.0</a>, David Nash / astronexus (CC BY-SA 4.0).
@@ -351,8 +383,6 @@ export function buildShell(root: HTMLElement): Shell {
     magValue: pick('mag-value'),
     fovInput: pick<HTMLInputElement>('fov'),
     fovValue: pick('fov-value'),
-    timeInput: pick<HTMLInputElement>('time'),
-    timeValue: pick('time-value'),
     linesToggle: pick<HTMLButtonElement>('t-lines'),
     labelsToggle: pick<HTMLButtonElement>('t-labels'),
     horizonToggle: pick<HTMLButtonElement>('t-horizon'),
@@ -381,6 +411,103 @@ export function buildShell(root: HTMLElement): Shell {
           <p class="help" style="font-size:13px;line-height:1.5">${detail}</p>
           <p class="help" style="font-size:12px;margin-top:20px">Run <code>npm run data</code> to generate the catalogue.</p>
         </div></div>`;
+    },
+
+    wireTime({ bounds, onScrub, onPick, onNow }) {
+      const jog = pick<HTMLInputElement>('time');
+      const dateInput = pick<HTMLInputElement>('time-date');
+
+      for (const [id, delta] of [
+        ['time-day-back', -DAY_MS],
+        ['time-hour-back', -HOUR_MS],
+        ['time-hour-fwd', HOUR_MS],
+        ['time-day-fwd', DAY_MS],
+      ] as const) {
+        pick<HTMLButtonElement>(id).addEventListener('click', () => onScrub(delta));
+      }
+
+      pick<HTMLButtonElement>('btn-now').addEventListener('click', onNow);
+
+      // The browser's own picker, bounded by the browser -- one less way to
+      // reach a date the planetary theory was never fit for.
+      dateInput.min = datetimeLocalValue(bounds.earliest);
+      dateInput.max = datetimeLocalValue(bounds.latest);
+      dateInput.addEventListener('click', () => {
+        // A desktop browser focuses a date field on click but only opens the
+        // calendar from its own icon, which is invisible under this label.
+        // Phones open it on the tap alone, and old browsers have neither.
+        try {
+          dateInput.showPicker?.();
+        } catch {
+          /* already open, or the browser would rather not */
+        }
+      });
+
+      dateInput.addEventListener('change', () => {
+        // A datetime-local value has no zone, and JS parses that form as local
+        // wall-clock time -- which is what the user typed.
+        const chosen = new Date(dateInput.value);
+        if (!Number.isNaN(chosen.getTime())) onPick(chosen);
+      });
+
+      // The jog wheel runs the clock rather than setting it: hold it over and
+      // the sky keeps turning, which is the half of this worth watching. It
+      // springs back to centre on release, so a control that shows no offset
+      // can never be sitting on one.
+      let running = 0;
+      let previous = 0;
+      const step = (stamp: number): void => {
+        const elapsed = previous === 0 ? 0 : stamp - previous;
+        previous = stamp;
+        const rate = scrubRate(Number(jog.value));
+        if (rate === 0) {
+          running = 0;
+          previous = 0;
+          return;
+        }
+        onScrub(rate * elapsed);
+        running = requestAnimationFrame(step);
+      };
+
+      jog.addEventListener('input', () => {
+        if (!running) running = requestAnimationFrame(step);
+      });
+
+      const centre = (): void => {
+        jog.value = '0';
+      };
+      for (const event of ['pointerup', 'pointercancel', 'blur', 'keyup'] as const) {
+        jog.addEventListener(event, centre);
+      }
+    },
+
+    showTime(when, offsetMs, atLimit) {
+      const travelling = !isPresent(offsetMs);
+      pick('timebar').dataset.travelling = String(travelling);
+      pick('timeframe').dataset.open = String(travelling);
+
+      pick('time-tag').textContent = atLimit
+        ? 'As far as the maths goes'
+        : travelling
+          ? `Time travel · ${formatOffset(offsetMs)}`
+          : 'Showing now';
+
+      // The year is always shown. Everywhere else in this app a date is today,
+      // so the one place it might not be is the place to be explicit.
+      pick('time-value').textContent = when.toLocaleString([], {
+        weekday: 'short',
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        hourCycle: 'h23',
+      });
+
+      // Leave the picker alone while it has focus, or it rewrites what is
+      // being typed into it.
+      const dateInput = pick<HTMLInputElement>('time-date');
+      if (document.activeElement !== dateInput) dateInput.value = datetimeLocalValue(when);
     },
 
     toast(text, ms = 3200) {
@@ -512,7 +639,7 @@ export function buildShell(root: HTMLElement): Shell {
 
       if (entries.length === 0) {
         list.innerHTML =
-          '<p class="empty">Nothing above the horizon.<br>Try the time slider in settings.</p>';
+          '<p class="empty">Nothing above the horizon.<br>Wind the sky forward and see what rises.</p>';
       } else {
         renderList(list, entries, onPick);
       }
@@ -555,6 +682,15 @@ function renderList(
       if (entry) onPick(entry);
     });
   });
+}
+
+/** `<input type="datetime-local">` wants local wall-clock time, not an instant. */
+function datetimeLocalValue(when: Date): string {
+  const pad = (value: number): string => String(value).padStart(2, '0');
+  return (
+    `${when.getFullYear()}-${pad(when.getMonth() + 1)}-${pad(when.getDate())}` +
+    `T${pad(when.getHours())}:${pad(when.getMinutes())}`
+  );
 }
 
 /** Catalogue names are trusted; a search query is not. */
