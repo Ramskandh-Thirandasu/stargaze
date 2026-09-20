@@ -18,7 +18,10 @@
     "typecheck": "npm run typecheck --workspaces --if-present",
     "android:sync": "npm run build && cap sync android",
     "android:open": "npm run android:sync && cap open android",
-    "android:run": "npm run android:sync && cap run android"
+    "android:run": "npm run android:sync && cap run android",
+    "ios:sync": "npm run build && cap sync ios",
+    "ios:open": "npm run ios:sync && cap open ios",
+    "ios:run": "npm run ios:sync && cap run ios"
   },
   "devDependencies": {
     "@capacitor/cli": "^8.5.0",
@@ -33,6 +36,7 @@
     "@capacitor/android": "^8.5.0",
     "@capacitor/camera": "^8.2.3",
     "@capacitor/core": "^8.5.0",
-    "@capacitor/geolocation": "^8.2.2"
+    "@capacitor/geolocation": "^8.2.2",
+    "@capacitor/ios": "^8.5.0"
   }
 }

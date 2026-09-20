@@ -1,10 +1,10 @@
 /**
- * The Android side of the same app.
+ * The native side of the same app -- Android and iOS both.
  *
  * Inside Capacitor the page still uses the ordinary web APIs -- `getUserMedia`,
  * `navigator.geolocation`, `DeviceOrientationEvent` -- because the WebView
  * serves from `https://localhost`, which is a secure context. What the browser
- * does not do is ask Android for the *runtime* permissions behind those APIs.
+ * does not do is ask the OS for the *runtime* permissions behind those APIs.
  * Without that the calls fail with no prompt and no useful error.
  *
  * So this module exists to do one thing: ask the operating system first. On the
@@ -30,7 +30,7 @@ export function isNative(): boolean {
 }
 
 /**
- * Ask Android for camera access.
+ * Ask the OS for camera access.
  *
  * Returns 'unavailable' on the web, where the browser handles this itself as
  * part of `getUserMedia`.
@@ -54,7 +54,7 @@ export async function requestNativeCamera(): Promise<NativePermission> {
   }
 }
 
-/** Ask Android for location access. */
+/** Ask the OS for location access. */
 export async function requestNativeLocation(): Promise<NativePermission> {
   if (!isNative()) return 'unavailable';
 
@@ -79,6 +79,11 @@ export async function requestNativeLocation(): Promise<NativePermission> {
  * sensor on this device, the plugin missing -- so the caller falls back to
  * DeviceOrientationEvent the same way it already does for every other
  * sensor gap. See RotationVectorPlugin.java for what this is fusing.
+ *
+ * There is no iOS counterpart and it is not obviously worth writing one:
+ * WebKit already exposes a fused heading through `webkitCompassHeading`,
+ * which is Core Motion's own answer by another name. iOS takes the false
+ * branch here and that is the intended path, not a gap.
  */
 export async function startRotationVector(
   onReading: (reading: { azimuth: number; pitch: number; roll: number }) => void,

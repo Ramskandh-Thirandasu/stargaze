@@ -1,12 +1,12 @@
 import type { CapacitorConfig } from '@capacitor/cli';
 
 /**
- * Capacitor wraps the same web build into an Android app.
+ * Capacitor wraps the same web build into an Android app and an iOS app.
  *
- * One codebase, two clients. The astronomy in `packages/core` and the whole UI
- * are identical -- Android only changes how the sensors are reached and how the
- * page is served (from the APK rather than over the network, which is also what
- * makes the secure-context problem disappear).
+ * One codebase, three clients. The astronomy in `packages/core` and the whole
+ * UI are identical -- the native shells only change how the sensors are reached
+ * and how the page is served (from the app bundle rather than over the network,
+ * which is also what makes the secure-context problem disappear).
  */
 const config: CapacitorConfig = {
   appId: 'app.stargaze.sky',
@@ -22,11 +22,25 @@ const config: CapacitorConfig = {
     webContentsDebuggingEnabled: false,
   },
 
+  ios: {
+    // WKWebView rubber-bands the whole page even though nothing on it scrolls;
+    // the sky visibly peeling off the top edge looks like a bug. Panels scroll
+    // in their own overflow containers, which this does not touch.
+    scrollEnabled: false,
+    // Same trade as Android: on for Safari's Web Inspector while debugging
+    // on-device, off for anything shipped.
+    webContentsDebuggingEnabled: false,
+  },
+
   server: {
     // Serving from https://localhost inside the WebView makes it a secure
     // context, so camera, geolocation and motion all work exactly as they do
     // in the browser -- no separate native path for any of them.
     androidScheme: 'https',
+    // iOS defaults to capacitor://localhost, and WebKit does not hand a custom
+    // scheme the camera. An app whose background IS the camera cannot live
+    // with that, so iOS gets the same https://localhost origin Android has.
+    iosScheme: 'https',
   },
 
   plugins: {

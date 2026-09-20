@@ -117,8 +117,10 @@ button {
   max-width: var(--shell-max);
   margin-inline: auto;
   pointer-events: none;
-  padding: calc(env(safe-area-inset-top, 0px) + 14px) 12px
-    calc(env(safe-area-inset-bottom, 0px) + 20px);
+  /* The side insets are zero in portrait and about 44px in landscape, where
+     the notch eats the edge the compass strip would otherwise run into. */
+  padding: calc(env(safe-area-inset-top, 0px) + 14px) max(12px, env(safe-area-inset-right, 0px))
+    calc(env(safe-area-inset-bottom, 0px) + 20px) max(12px, env(safe-area-inset-left, 0px));
   display: flex;
   flex-direction: column;
   transition: margin-inline 0.28s cubic-bezier(0.32, 0.72, 0, 1);
