@@ -1,0 +1,21 @@
+name: Sync to GitLab
+
+on:
+  push:
+    branches:
+      - '*'
+    tags:
+      - '*'
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Push to GitLab
+        run: |
+          git push --prune https://oauth2:${{ secrets.github/gitlab-stargaze-syncup }}@gitlab.com/RAMSK/stargaze.git +refs/remotes/origin/*:refs/heads/* +refs/tags/*:refs/tags/*
