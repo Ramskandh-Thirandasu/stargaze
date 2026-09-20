@@ -14,6 +14,8 @@
  * machine with no magnetometer.
  */
 
+import { HeadingFusion, headingRateFromDeviceRotation } from '@stargaze/core';
+
 import { isNative, nativePosition, requestNativeCamera, requestNativeLocation } from './native.js';
 
 export type PermissionState = 'unknown' | 'granted' | 'denied' | 'unsupported';
@@ -26,6 +28,10 @@ export interface OrientationSample {
   /** True when the reading is referenced to compass north rather than an
    *  arbitrary starting direction. Without it the heading is meaningless. */
   absolute: boolean;
+  /** True when `alpha` is a gyroscope-fused heading rather than the raw
+   *  magnetometer one. Only ever true where the device has a gyroscope and
+   *  the heading was absolute to begin with. */
+  fused: boolean;
 }
 
 /* ------------------------------------------------------------------ *
@@ -106,16 +112,52 @@ export function motionNeedsGesture(): boolean {
   return typeof constructor?.requestPermission === 'function';
 }
 
+/**
+ * A gap longer than this between two samples is the page having been
+ * backgrounded, a dropped burst, or the browser throttling -- not a slow
+ * sensor. Integrating a rate of turn across one would spin the sky.
+ */
+const MAX_SENSOR_GAP_SECONDS = 0.25;
+
+/**
+ * A gyroscope that has never reported any rotation at all is not a gyroscope.
+ * Some browsers fire `devicemotion` with a permanently zero `rotationRate` on
+ * hardware that has none, and a filter told it has a steady gyro stops
+ * believing the magnetometer -- which would leave the heading frozen. So wait
+ * for one real turn before treating the sensor as present.
+ */
+const GYRO_WAKE_DEGREES_PER_SECOND = 0.5;
+
 export class OrientationSource {
   private listener: OrientationListener | null = null;
   private handler: ((event: DeviceOrientationEvent) => void) | null = null;
+  private motionHandler: ((event: DeviceMotionEvent) => void) | null = null;
   private eventName: 'deviceorientationabsolute' | 'deviceorientation' = 'deviceorientation';
+
+  private readonly fusion = new HeadingFusion();
+  /** Latest tilt, which is what turns a device-frame rate of turn into a rate
+   *  of change of heading. */
+  private tilt: { beta: number; gamma: number } | null = null;
+  private lastMotion = 0;
+  private lastOrientation = 0;
 
   /** Set once a reading has actually arrived, not merely been permitted. */
   receiving = false;
 
   /** False when readings are relative to wherever the phone happened to start. */
   absolute = false;
+
+  /** Set once the gyroscope has reported a genuine turn. */
+  gyro = false;
+
+  /**
+   * How much to believe the magnetometer, 0 to 1 -- set this from
+   * {@link MagneticFieldMonitor} where a raw field reading exists. 1 means no
+   * reason to doubt it, which is also the honest answer where nothing is
+   * measuring the field at all. Has no effect without a gyroscope, since then
+   * the magnetometer is the only source of a heading there is.
+   */
+  magneticTrust = 1;
 
   static get supported(): boolean {
     return typeof window !== 'undefined' && 'DeviceOrientationEvent' in window;
@@ -153,6 +195,10 @@ export class OrientationSource {
     this.handler = (event) => this.onEvent(event);
     window.addEventListener(this.eventName, this.handler as EventListener, true);
 
+    // Best-effort: every way this can fail leaves the heading exactly as
+    // unfused as it was before, which is what shipped for a year.
+    await this.startGyroscope();
+
     // A permission grant is not a reading. If nothing arrives, the caller needs
     // to know so it can fall back to drag rather than showing a frozen sky.
     await new Promise((resolve) => setTimeout(resolve, 700));
@@ -176,14 +222,83 @@ export class OrientationSource {
 
     if (alpha === null || event.beta === null || event.gamma === null) return;
 
+    this.tilt = { beta: event.beta, gamma: event.gamma };
     this.receiving = true;
+
+    // A relative heading has no north in it, so there is nothing for the
+    // gyroscope to be drifting away from -- pass it straight through.
+    const heading = this.absolute
+      ? this.fusion.correct(alpha, this.elapsed('orientation'), this.magneticTrust)
+      : alpha;
+
     this.listener?.({
-      alpha,
+      alpha: heading,
       beta: event.beta,
       gamma: event.gamma,
       screenAngle: screenAngle(),
       absolute: this.absolute,
+      fused: this.absolute && this.fusion.usingGyro,
     });
+  }
+
+  /**
+   * Start feeding the gyroscope in, where there is one.
+   *
+   * `devicemotion` rather than the Generic Sensor API's `Gyroscope`: it exists
+   * on iOS as well as Chrome, needs no permissions-policy grant, and is
+   * covered by the motion permission already asked for above -- the second
+   * `requestPermission` below resolves without a prompt once the first has
+   * been granted, since browsers gate both behind one site setting.
+   */
+  private async startGyroscope(): Promise<void> {
+    if (typeof window === 'undefined' || !('DeviceMotionEvent' in window)) return;
+
+    const constructor = window.DeviceMotionEvent as unknown as GestureGatedDeviceOrientationEvent;
+    if (typeof constructor.requestPermission === 'function') {
+      try {
+        if ((await constructor.requestPermission()) !== 'granted') return;
+      } catch {
+        return;
+      }
+    }
+
+    this.motionHandler = (event) => this.onMotion(event);
+    window.addEventListener('devicemotion', this.motionHandler as EventListener);
+  }
+
+  private onMotion(event: DeviceMotionEvent): void {
+    const rate = event.rotationRate;
+    const tilt = this.tilt;
+    // No tilt yet means no orientation reading yet, and without one there is no
+    // way to know which device axis the heading is turning about.
+    if (!rate || !tilt) return;
+
+    const { alpha, beta, gamma } = rate;
+    if (alpha === null || beta === null || gamma === null) return;
+
+    if (!this.gyro) {
+      if (Math.max(Math.abs(alpha), Math.abs(beta), Math.abs(gamma)) < GYRO_WAKE_DEGREES_PER_SECOND) {
+        return;
+      }
+      this.gyro = true;
+    }
+
+    const dt = this.elapsed('motion');
+    if (dt <= 0) return;
+
+    this.fusion.predict(headingRateFromDeviceRotation({ alpha, beta, gamma }, tilt.beta, tilt.gamma), dt);
+  }
+
+  /** Seconds since the last sample of this kind, 0 for the first one. The
+   *  event's own timestamp is not comparable across the two streams. */
+  private elapsed(stream: 'motion' | 'orientation'): number {
+    const now = performance.now();
+    const previous = stream === 'motion' ? this.lastMotion : this.lastOrientation;
+    if (stream === 'motion') this.lastMotion = now;
+    else this.lastOrientation = now;
+
+    if (previous === 0) return 0;
+    return Math.min((now - previous) / 1000, MAX_SENSOR_GAP_SECONDS);
   }
 }
 

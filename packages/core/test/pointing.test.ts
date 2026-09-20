@@ -15,8 +15,12 @@ import {
   basisFromDeviceOrientation,
   basisFromQuaternion,
   directionFromHorizontal,
+  headingRateFromDeviceRotation,
   horizontalFromDirection,
+  DEFAULT_HEADING_FUSION,
   HeadingFilter,
+  HeadingFusion,
+  MagneticFieldMonitor,
 } from '../src/orientation.js';
 import {
   couldBeVisible,
@@ -180,6 +184,233 @@ describe('heading filter', () => {
     // A single wild reading must not throw the view across the sky.
     const after = filter.push(160);
     expect(after).toBeLessThan(110);
+  });
+});
+
+describe('gyroscope heading rate', () => {
+  it('reads the heading off the z axis when the phone lies flat', () => {
+    // Face-up on a table: spinning the phone on the table top is exactly a
+    // change of heading, and nothing else contributes.
+    expect(headingRateFromDeviceRotation({ alpha: 10, beta: 4, gamma: -7 }, 0, 0)).toBeCloseTo(
+      10,
+      9,
+    );
+  });
+
+  it('reads the heading off the y axis when the phone is held upright', () => {
+    // The stargazing pose. This is the case that makes the projection
+    // necessary: rotationRate.alpha now barely touches the heading at all.
+    expect(headingRateFromDeviceRotation({ alpha: 10, beta: 4, gamma: 6 }, 90, 0)).toBeCloseTo(6, 9);
+  });
+
+  it('reverses sign when the phone is rolled onto its edge', () => {
+    // gamma of 90 tips the device x axis to point at the ground, so a
+    // right-handed turn about it swings the heading the other way.
+    expect(headingRateFromDeviceRotation({ alpha: 0, beta: 10, gamma: 0 }, 0, 90)).toBeCloseTo(
+      -10,
+      9,
+    );
+  });
+
+  it('never invents rotation that was not measured', () => {
+    // Whatever the tilt, projecting onto one axis can only ever lose
+    // magnitude. A bug in the trigonometry usually shows up as gain.
+    const rate = { alpha: 12, beta: -5, gamma: 8 };
+    const magnitude = Math.hypot(rate.alpha, rate.beta, rate.gamma);
+    for (let beta = -180; beta <= 180; beta += 15) {
+      for (let gamma = -90; gamma <= 90; gamma += 15) {
+        const heading = headingRateFromDeviceRotation(rate, beta, gamma);
+        expect(Math.abs(heading)).toBeLessThanOrEqual(magnitude + 1e-9);
+      }
+    }
+  });
+});
+
+describe('heading fusion', () => {
+  const FRAME = 1 / 60;
+
+  it('takes the first magnetometer reading whole', () => {
+    // No gyroscope reading can supply a starting bearing, so there is nothing
+    // to ease away from -- and easing up from zero would sweep the sky.
+    expect(new HeadingFusion().correct(123, FRAME)).toBeCloseTo(123, 9);
+  });
+
+  it('gives nothing back until the magnetometer has said where north is', () => {
+    const fusion = new HeadingFusion();
+    expect(fusion.predict(30, FRAME)).toBeNull();
+    expect(fusion.heading).toBeNull();
+  });
+
+  it('converges on a steady heading', () => {
+    const fusion = new HeadingFusion();
+    fusion.correct(0, FRAME);
+    for (let i = 0; i < 120; i += 1) fusion.correct(90, FRAME);
+    expect(fusion.heading).toBeCloseTo(90, 3);
+  });
+
+  it('crosses north the short way', () => {
+    const fusion = new HeadingFusion();
+    fusion.correct(359, FRAME);
+    const next = fusion.correct(1, FRAME);
+    expect(next > 359 || next < 1).toBe(true);
+  });
+
+  it('lets the gyroscope carry a turn the magnetometer has not caught up with', () => {
+    // A real magnetometer smears while the phone is moving. The gyroscope is
+    // at its best exactly then, and the point of the filter is that the sky
+    // follows the turn rather than the lagging compass.
+    const fusion = new HeadingFusion();
+    fusion.correct(0, FRAME);
+
+    for (let i = 0; i < 60; i += 1) {
+      fusion.predict(20, FRAME);
+      fusion.correct(0, FRAME);
+    }
+
+    expect(fusion.usingGyro).toBe(true);
+    // One second at 20 degrees per second, less a small pull back toward the
+    // stale reading.
+    expect(fusion.heading).toBeGreaterThan(15);
+    expect(fusion.heading).toBeLessThan(20.001);
+  });
+
+  it('lets the magnetometer pull out gyroscope drift', () => {
+    // The complementary half. A gyro biased by a degree a second walks 60
+    // degrees off in a minute on its own; with a magnetometer holding it, the
+    // error settles at a couple of degrees and stays there.
+    const fusion = new HeadingFusion();
+    fusion.correct(0, FRAME);
+
+    for (let i = 0; i < 60 * 60; i += 1) {
+      fusion.predict(1, FRAME);
+      fusion.correct(0, FRAME);
+    }
+
+    const error = Math.abs(((fusion.heading as number) + 180) % 360) - 180;
+    expect(Math.abs(error)).toBeLessThan(3);
+  });
+
+  it('matches the plain low-pass when there is no gyroscope', () => {
+    // The promise made to every phone without the sensor: nothing gets worse.
+    const fusion = new HeadingFusion();
+    const filter = new HeadingFilter(0.18);
+    fusion.correct(0, FRAME);
+    filter.push(0);
+
+    for (let i = 0; i < 30; i += 1) {
+      fusion.correct(90, FRAME);
+      filter.push(90);
+    }
+
+    expect(fusion.usingGyro).toBe(false);
+    expect(fusion.heading).toBeCloseTo(filter.push(90), 0);
+  });
+
+  it('goes back to the magnetometer when the gyroscope stops reporting', () => {
+    // Permission withdrawn, page backgrounded, sensor gone. Nobody tells the
+    // filter; it has to notice on its own or the heading freezes.
+    const fusion = new HeadingFusion();
+    fusion.correct(0, FRAME);
+    fusion.predict(0, FRAME);
+    expect(fusion.usingGyro).toBe(true);
+
+    const silence = Math.ceil(DEFAULT_HEADING_FUSION.gyroTimeoutSeconds / FRAME) + 1;
+    for (let i = 0; i < silence; i += 1) fusion.correct(0, FRAME);
+    expect(fusion.usingGyro).toBe(false);
+
+    for (let i = 0; i < 60; i += 1) fusion.correct(45, FRAME);
+    expect(fusion.heading).toBeCloseTo(45, 2);
+  });
+
+  it('snaps rather than crawling when the estimate has lost the plot', () => {
+    // Drift is gradual. A gap this size is a dropped burst of gyro samples or
+    // a wrong-signed rate, and easing back from it would take minutes.
+    const fusion = new HeadingFusion();
+    fusion.correct(0, FRAME);
+    fusion.predict(0, FRAME);
+    expect(fusion.correct(180, FRAME)).toBeCloseTo(180, 9);
+  });
+
+  it('ignores a distrusted magnetometer only while the gyroscope is running', () => {
+    const fused = new HeadingFusion();
+    fused.correct(0, FRAME);
+    for (let i = 0; i < 120; i += 1) {
+      fused.predict(0, FRAME);
+      fused.correct(40, FRAME, 0);
+    }
+    expect(fused.heading).toBeCloseTo(0, 6);
+
+    // Without a gyroscope there is nothing else to carry the heading, so a
+    // doubtful reading still beats a frozen sky.
+    const alone = new HeadingFusion();
+    alone.correct(0, FRAME);
+    for (let i = 0; i < 120; i += 1) alone.correct(40, FRAME, 0);
+    expect(alone.heading).toBeCloseTo(40, 3);
+  });
+});
+
+describe('magnetic interference', () => {
+  /** Roughly what the Earth makes over southern England, in microtesla. */
+  const EXPECTED = 49;
+
+  it('is confident about a field that matches the model and holds still', () => {
+    const monitor = new MagneticFieldMonitor();
+    let quality = monitor.push(EXPECTED, EXPECTED);
+    for (let i = 0; i < 10; i += 1) quality = monitor.push(EXPECTED + 0.3, EXPECTED);
+    expect(quality.confidence).toBeCloseTo(1, 6);
+    expect(quality.interference).toBe(false);
+  });
+
+  it('flags a field the Earth could not be making here', () => {
+    expect(new MagneticFieldMonitor().push(110, EXPECTED).interference).toBe(true);
+    expect(new MagneticFieldMonitor().push(14, EXPECTED).interference).toBe(true);
+  });
+
+  it('treats half the field and twice the field as equally wrong', () => {
+    // A percentage would not: 50% under and 100% over are the same mistake.
+    const strong = new MagneticFieldMonitor().push(EXPECTED * 1.5, EXPECTED);
+    const weak = new MagneticFieldMonitor().push(EXPECTED / 1.5, EXPECTED);
+    expect(strong.confidence).toBeCloseTo(weak.confidence, 9);
+    expect(strong.confidence).toBeGreaterThan(0);
+  });
+
+  it('keeps firing where the boolean it replaces did', () => {
+    // The old test was ratio > 1.8 or < 0.55, tuned against real handsets.
+    // Grading the signal must not quietly move the point it warns at.
+    expect(new MagneticFieldMonitor().push(EXPECTED * 1.85, EXPECTED).interference).toBe(true);
+    expect(new MagneticFieldMonitor().push(EXPECTED * 0.53, EXPECTED).interference).toBe(true);
+    expect(new MagneticFieldMonitor().push(EXPECTED * 1.3, EXPECTED).interference).toBe(false);
+  });
+
+  it('flags a field that lurches when the Earth\'s does not', () => {
+    // Every reading here is a plausible field strength on its own -- this is
+    // the case the magnitude check alone cannot see. Something ferrous is
+    // moving past, and the bearing is being dragged with it.
+    const monitor = new MagneticFieldMonitor();
+    let quality = monitor.push(EXPECTED, EXPECTED);
+    for (let i = 0; i < 10; i += 1) {
+      quality = monitor.push(i % 2 === 0 ? EXPECTED + 10 : EXPECTED, EXPECTED);
+      expect(Math.abs(Math.log(quality.ratio))).toBeLessThan(Math.log(1.25));
+    }
+    expect(quality.interference).toBe(true);
+  });
+
+  it('recovers once the disturbance passes', () => {
+    const monitor = new MagneticFieldMonitor();
+    for (let i = 0; i < 10; i += 1) monitor.push(i % 2 === 0 ? EXPECTED + 10 : EXPECTED, EXPECTED);
+
+    let quality = monitor.push(EXPECTED, EXPECTED);
+    for (let i = 0; i < 20; i += 1) quality = monitor.push(EXPECTED, EXPECTED);
+    expect(quality.interference).toBe(false);
+    expect(quality.confidence).toBeCloseTo(1, 6);
+  });
+
+  it('stays quiet when there is nothing to compare against', () => {
+    // Above 85 degrees latitude the model has no answer. Warning there would
+    // be inventing a fault out of not knowing.
+    const quality = new MagneticFieldMonitor().push(EXPECTED, 0);
+    expect(quality.interference).toBe(false);
+    expect(quality.confidence).toBe(1);
   });
 });
 
