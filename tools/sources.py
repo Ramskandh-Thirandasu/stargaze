@@ -148,3 +148,126 @@ def load_constellations() -> list[Constellation]:
 def constellation_line_hips() -> set[int]:
     """Every HIP number a constellation figure draws through."""
     return {hip for c in load_constellations() for line in c.lines for hip in line}
+
+
+# OpenNGC -- the NGC/IC catalogue as a plain semicolon-separated CSV, actively
+# maintained and versioned in git. Picked over scraping SEDS or Wikipedia
+# because it carries type, axes and magnitudes in one consistent schema, and
+# because a CSV in a git repo is a stable thing to build against.
+#
+# `addendum.csv` holds the objects that are in neither the NGC nor the IC --
+# the Pleiades most of all, which is the brightest Messier object there is.
+OPENNGC_URL = "https://raw.githubusercontent.com/mattiaverga/OpenNGC/master/database_files/NGC.csv"
+OPENNGC_FILE = "openngc.csv"
+OPENNGC_ADDENDUM_URL = "https://raw.githubusercontent.com/mattiaverga/OpenNGC/master/database_files/addendum.csv"
+OPENNGC_ADDENDUM_FILE = "openngc_addendum.csv"
+OPENNGC_LICENSE = "CC BY-SA 4.0 - OpenNGC, Mattia Verga"
+
+# OpenNGC's type codes, collapsed to the handful of words a person would
+# actually use. The distinctions this drops (emission versus reflection
+# nebula, galaxy pair versus triplet) are real, but they are not what someone
+# standing in a field pointing a phone at a smudge is asking.
+#
+# SNR folds into "nebula" rather than earning its own word: exactly one
+# Messier object is one (M1, the Crab), so "supernova remnant" would be a
+# vocabulary entry with a single member.
+OPENNGC_TYPES = {
+    "G": "galaxy",
+    "GPair": "galaxy",
+    "GTrpl": "galaxy",
+    "GGroup": "galaxy",
+    "GCl": "globular",
+    "OCl": "cluster",
+    "*Ass": "cluster",
+    "Cl+N": "nebula",
+    "Neb": "nebula",
+    "EmN": "nebula",
+    "RfN": "nebula",
+    "HII": "nebula",
+    "SNR": "nebula",
+    "PN": "planetary",
+    "**": "star",
+    "*": "star",
+    "Other": "star",
+}
+
+
+# OpenNGC lists common names alphabetically, so for M11 the French name sorts
+# ahead of the one an English-speaking user would recognise.
+#
+# Messier number -> the name to use instead of the first one listed.
+MESSIER_NAMES = {
+    11: "Wild Duck Cluster",
+}
+
+
+class DeepSky(NamedTuple):
+    messier: int         # Messier number, 1-110
+    ngc: int             # NGC number, or 0 when the object has none
+    name: str            # common name, or ""
+    kind: str            # one of OPENNGC_TYPES' values
+    ra_deg: float        # J2000 right ascension, degrees
+    dec_deg: float       # J2000 declination, degrees
+    mag: float           # apparent visual magnitude
+    major_arcmin: float  # apparent size along the long axis
+    minor_arcmin: float  # ... and the short one; equal to major when round
+
+
+def _sexagesimal(value: str, per_unit: float) -> float:
+    """"HH:MM:SS.SS" or "+DD:MM:SS.S" to a single number.
+
+    `per_unit` is what one leading unit is worth in degrees: 15 for hours of
+    right ascension, 1 for degrees of declination. The sign has to come off
+    before the split, or "-00:49:23" comes out positive -- the minus lives on
+    a degrees field that is already zero.
+    """
+    text = value.strip()
+    sign = -1.0 if text.startswith("-") else 1.0
+    units, minutes, seconds = (_float(part) for part in text.lstrip("+-").split(":"))
+    return sign * (units + minutes / 60.0 + seconds / 3600.0) * per_unit
+
+
+def iter_messier() -> Iterator[DeepSky]:
+    """Yield the Messier objects, from OpenNGC's NGC and addendum files."""
+    seen: set[int] = set()
+
+    for url, filename in (
+        (OPENNGC_URL, OPENNGC_FILE),
+        (OPENNGC_ADDENDUM_URL, OPENNGC_ADDENDUM_FILE),
+    ):
+        text = fetch(url, filename).decode("utf-8", "replace")
+
+        for row in csv.DictReader(io.StringIO(text), delimiter=";"):
+            messier = row.get("M", "").strip()
+            if not messier:
+                continue
+            # OpenNGC files M102 as a duplicate row pointing back at M101,
+            # which is the modern reading of a 250-year-old bookkeeping error.
+            # Keeping it would draw one galaxy twice under two names.
+            if row["Type"] == "Dup":
+                continue
+
+            number = int(messier)
+            if number in seen:
+                continue
+            seen.add(number)
+
+            designation = row["Name"].strip()
+            major = _float(row.get("MajAx", ""))
+            # Some entries carry no minor axis, because they are round enough
+            # that nobody measured one.
+            minor = _float(row.get("MinAx", "")) or major
+
+            yield DeepSky(
+                messier=number,
+                ngc=int(designation[3:]) if designation.startswith("NGC") else 0,
+                # Several objects carry a comma-separated list of names; the
+                # first is the one people use, bar the exceptions above.
+                name=MESSIER_NAMES.get(number, row.get("Common names", "").split(",")[0].strip()),
+                kind=OPENNGC_TYPES.get(row["Type"], "star"),
+                ra_deg=_sexagesimal(row["RA"], 15.0),
+                dec_deg=_sexagesimal(row["Dec"], 1.0),
+                mag=_float(row["V-Mag"], 99.0),
+                major_arcmin=major,
+                minor_arcmin=minor,
+            )

@@ -1,13 +1,14 @@
 /**
  * Loading the generated catalogues.
  *
- * Five small JSON files, ~57 KB gzipped between them. They are fetched once and
+ * Six small JSON files, ~58 KB gzipped between them. They are fetched once and
  * parsed into typed arrays; after that the app never touches the network again,
  * which is the point -- it is used in fields, not on wifi.
  */
 
 import {
   parseDeclinationGrid,
+  parseDeepSky,
   parseStarCatalog,
   parseStarNames,
   resolveConstellations,
@@ -15,6 +16,8 @@ import {
   type ConstellationJson,
   type DeclinationGrid,
   type DeclinationGridJson,
+  type DeepSkyJson,
+  type DeepSkyObject,
   type PlanetTable,
   type StarCatalog,
   type StarCatalogJson,
@@ -28,6 +31,7 @@ export interface SkyData {
   figures: ConstellationFigures;
   planets: PlanetTable;
   declination: DeclinationGrid;
+  deepSky: DeepSkyObject[];
 }
 
 async function json<T>(path: string): Promise<T> {
@@ -39,13 +43,15 @@ async function json<T>(path: string): Promise<T> {
 }
 
 export async function loadSkyData(base = './data'): Promise<SkyData> {
-  const [starsJson, namesJson, constellationsJson, planets, declinationJson] = await Promise.all([
-    json<StarCatalogJson>(`${base}/stars.json`),
-    json<StarNamesJson>(`${base}/names.json`),
-    json<ConstellationJson>(`${base}/constellations.json`),
-    json<PlanetTable>(`${base}/planets.json`),
-    json<DeclinationGridJson>(`${base}/declination.json`),
-  ]);
+  const [starsJson, namesJson, constellationsJson, planets, declinationJson, deepSkyJson] =
+    await Promise.all([
+      json<StarCatalogJson>(`${base}/stars.json`),
+      json<StarNamesJson>(`${base}/names.json`),
+      json<ConstellationJson>(`${base}/constellations.json`),
+      json<PlanetTable>(`${base}/planets.json`),
+      json<DeclinationGridJson>(`${base}/declination.json`),
+      json<DeepSkyJson>(`${base}/deepsky.json`),
+    ]);
 
   const stars = parseStarCatalog(starsJson);
 
@@ -55,6 +61,7 @@ export async function loadSkyData(base = './data'): Promise<SkyData> {
     figures: resolveConstellations(constellationsJson, stars),
     planets,
     declination: parseDeclinationGrid(declinationJson),
+    deepSky: parseDeepSky(deepSkyJson),
   };
 }
 

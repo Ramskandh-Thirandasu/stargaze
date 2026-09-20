@@ -66,6 +66,12 @@ const PLANET_COLOR: Record<string, string> = {
 };
 
 /**
+ * Deep-sky markers get their own colour, away from the blues and creams the
+ * stars occupy, so a smudge never reads as a bright star at a glance.
+ */
+const DEEP_SKY_COLOR = '154, 214, 196';
+
+/**
  * Keep a centre-aligned label fully on screen.
  *
  * Labels are drawn centred on the object, so one near an edge gets its name
@@ -314,6 +320,11 @@ export class SkyRenderer {
       const point = project(direction, basis, viewport);
       if (!point) return;
 
+      if (object.kind === 'deepsky') {
+        this.drawDeepSky(object, point, viewport, index, frame.limitingMagnitude, options);
+        return;
+      }
+
       const color = PLANET_COLOR[object.name] ?? '#ffffff';
 
       // The Moon is drawn at its true angular size; everything else is a point
@@ -366,6 +377,70 @@ export class SkyRenderer {
     ctx.restore();
 
     if (options.selected !== null) this.drawSelection(frame, basis, viewport, options.selected);
+  }
+
+  /**
+   * A deep-sky object, as an outline at its real apparent size.
+   *
+   * Deliberately not a dot. These are extended things -- M31 is six Moons
+   * wide -- and drawing one as a point would promise a pinprick of light that
+   * is not what turns up in the eyepiece or the photograph. The outline is
+   * dashed because a galaxy has no edge: it says "roughly this big" rather
+   * than claiming a boundary the object does not have.
+   *
+   * No position angle: the source catalogue leaves it blank for most entries,
+   * and an ellipse rotated to a default of zero would be confidently wrong
+   * more often than it was right.
+   */
+  private drawDeepSky(
+    object: SkyObject,
+    point: { x: number; y: number },
+    viewport: Viewport,
+    index: number,
+    limitingMagnitude: number,
+    options: RenderOptions,
+  ): void {
+    // Most of the Messier list needs binoculars. Gating on the same setting
+    // the stars use keeps one rule in the app: nothing is drawn that the user
+    // has said they cannot see.
+    if (object.magnitude > options.magnitudeLimit) return;
+
+    const ctx = this.context;
+    const pixelsPerDegree = focalLength(viewport) * (Math.PI / 180);
+
+    // A floor of 5 pixels: most of these are a few arcminutes across and
+    // would otherwise draw smaller than the finger trying to tap them.
+    const rx = Math.max(5, (object.angularDiameter / 2) * pixelsPerDegree);
+    const ry = Math.max(4, ((object.angularMinor ?? object.angularDiameter) / 2) * pixelsPerDegree);
+
+    const washedOut = object.magnitude > limitingMagnitude;
+    ctx.globalAlpha = washedOut ? 0.32 : 0.85;
+
+    ctx.strokeStyle = `rgba(${DEEP_SKY_COLOR},1)`;
+    ctx.lineWidth = 1.1;
+    ctx.setLineDash([3, 3]);
+    ctx.beginPath();
+    ctx.ellipse(point.x, point.y, rx, ry, 0, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // A faint wash inside, so a large outline does not read as an empty ring.
+    ctx.fillStyle = `rgba(${DEEP_SKY_COLOR},0.07)`;
+    ctx.fill();
+
+    // No label on something the sky has already washed out: the marker is
+    // there to be found if you go looking, but a name floating over what
+    // looks like empty sky is a promise the sky is not keeping tonight.
+    if (options.showLabels && !washedOut) {
+      ctx.fillStyle = `rgba(${DEEP_SKY_COLOR},0.82)`;
+      ctx.fillText(
+        object.name,
+        clampLabelX(ctx, object.name, point.x, this.width),
+        point.y - ry - 8,
+      );
+    }
+
+    this.hits.push({ x: point.x, y: point.y, index: -1 - index, radius: Math.max(rx, 10) });
   }
 
   /** Darken the unlit part of the Moon's disc. */

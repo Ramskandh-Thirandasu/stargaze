@@ -31,6 +31,7 @@ self.addEventListener('install', (event) => {
         './data/constellations.json',
         './data/planets.json',
         './data/declination.json',
+        './data/deepsky.json',
       ]),
     ),
   );
