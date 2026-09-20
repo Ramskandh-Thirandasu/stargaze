@@ -19,8 +19,10 @@ Try it: https://ramskandh-thirandasu.github.io/stargaze/
 ## What it does
 
 - 1,009 stars down to magnitude 4.5, all 88 constellations, the five naked-eye planets, and the Moon with its phase
+- 29 Messier objects, the galaxies and nebulae you can actually pick out by eye
 - A camera mode that draws the labels over the live camera feed
-- Compass calibration, because phone compasses are usually a few degrees off
+- Compass calibration, and the gyroscope smooths out the heading so the sky doesn't jitter
+- Scrub the time forwards and back to see the sky on any date
 - Search by name, and a Tonight list of what's above the horizon right now
 - Drag mode, so you can look around on a laptop with no sensors
 - Works offline
@@ -43,7 +45,7 @@ All of it runs on the device, so your location and camera never leave your phone
 
 - The compass is the weak point. Phone magnetometers are usually 5 to 15 degrees off, which is 10 to 30 Moon widths. That's what the calibration screen is for, but you have to use it.
 - Metal and electronics make it worse. Indoors or in a car the heading can be badly wrong. The app warns you when the readings look unstable, but it can't fix them.
-- Magnitude 4.5 isn't many stars. Enough to find the constellations and planets. If you want galaxies and nebulae, use Stellarium.
+- Magnitude 4.5 isn't many stars. Enough to find the constellations and planets, and the deep-sky list stops at magnitude 6 for the same reason. If you want a catalogue that goes deeper than your eyes do, use Stellarium.
 - On iOS you have to tap the page once before motion works. Safari won't grant the orientation permission without a gesture.
 - Uranus and Neptune are calculated and tested, but never drawn. They're too faint to see, and a label over empty sky just makes you distrust the rest.
 
@@ -57,7 +59,7 @@ npm test
 npm run dev
 ```
 
-`npm test` runs 118 tests in `packages/core`. Nine more in `live-verify.test.ts` are skipped by default because they hit JPL Horizons over the network. `npm run dev` serves on http://localhost:5173.
+`npm test` runs 168 tests in `packages/core`. Nine more in `live-verify.test.ts` are skipped by default because they hit JPL Horizons over the network. `npm run dev` serves on http://localhost:5173.
 
 ### On a real phone
 
@@ -77,6 +79,15 @@ npm run android:open
 ```
 
 Needs JDK 21. Newer ones fail with `Unsupported class file major version`, including the JDK inside Android Studio, which is a confusing way to lose an evening. The APK lands in `android/app/build/outputs/apk/debug/app-debug.apk`.
+
+### iOS
+
+```bash
+npm run ios:sync
+npm run ios:open
+```
+
+Needs a Mac and Xcode. You have to set a signing team on the App target yourself, and you want a real device rather than the Simulator, which has no camera or magnetometer and so only ever shows the drag fallback. Full notes, including the app icon that still needs replacing, are in [docs/ios-build.md](docs/ios-build.md).
 
 ### Rebuilding the star data
 
@@ -102,10 +113,11 @@ The worst is Saturn, at about a quarter of a Moon width. A compass that's 5 to 1
 
 ```
 tools/          Python scripts that build the catalogue JSON. Not shipped in the app.
-packages/core/  The astronomy: coordinates, ephemeris, visibility, pointing. 118 tests.
+packages/core/  The astronomy: coordinates, ephemeris, visibility, pointing. 168 tests.
 packages/web/   The app, plus the generated data in public/data.
 server/         Local https server, only used for testing on a phone.
 android/        Capacitor wrapper around the same web build.
+ios/            The same, for iOS.
 ```
 
 `packages/core` has no DOM dependencies, which is what makes the maths testable on its own. That split was the first decision I made and the one I'd keep.
@@ -117,11 +129,12 @@ These are compiled into the app at build time by the scripts in `tools/`. None o
 | Data | Source |
 |---|---|
 | Star positions, magnitudes, colours, names | [HYG Database v4.0](https://github.com/astronexus/HYG-Database), David Nash / astronexus, CC BY-SA 4.0 |
+| Deep-sky objects | [OpenNGC](https://github.com/mattiaverga/OpenNGC), Mattia Verga, CC BY-SA 4.0 |
 | Constellation figures | [Stellarium](https://github.com/Stellarium/stellarium), `modern_iau` sky culture, CC BY-SA 4.0 |
 | Planetary orbital elements | [NASA JPL, Approximate Positions of the Planets](https://ssd.jpl.nasa.gov/planets/approx_pos.html), public domain |
 | Magnetic declination | [IGRF-14](https://www.ngdc.noaa.gov/IAGA/vmod/igrf.html), IAGA Working Group V-MOD via NOAA NCEI |
 
-Gzipped the whole data set is about 57 KB, which is what makes shipping it offline practical. The reference positions used in the tests come from [JPL Horizons](https://ssd.jpl.nasa.gov/horizons/).
+Gzipped the whole data set is about 58 KB, which is what makes shipping it offline practical. The reference positions used in the tests come from [JPL Horizons](https://ssd.jpl.nasa.gov/horizons/).
 
 ## AI usage
 
