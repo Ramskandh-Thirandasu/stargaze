@@ -18,6 +18,7 @@ import {
   HeadingFilter,
   isCalibrationStale,
   magneticFieldIntensity,
+  MagneticFieldMonitor,
   normalize360,
   type CameraBasis,
   type Viewport,
@@ -139,6 +140,7 @@ class StarGaze {
   private latestNative: { azimuth: number; pitch: number; roll: number } | null = null;
 
   private readonly magnetometer = new MagnetometerSource();
+  private readonly fieldMonitor = new MagneticFieldMonitor();
   private liveFieldMicrotesla: number | null = null;
   /** True when the live field reading disagrees with the IGRF model by more
    *  than ordinary sensor variation explains -- a nearby magnet or ferrous
@@ -912,17 +914,17 @@ class StarGaze {
       this.observer.latitude,
       this.observer.longitude,
     );
-    if (!model.reliable) {
-      this.magneticInterference = false;
-      return;
-    }
+    // An unreliable model reads as no baseline at all, which the monitor
+    // answers with full confidence rather than a warning it cannot justify.
+    const quality = this.fieldMonitor.push(
+      this.liveFieldMicrotesla,
+      model.reliable ? model.nanotesla / 1000 : 0,
+    );
 
-    // Phone magnetometers are not lab instruments -- a modest disagreement
-    // with the model is normal calibration slop, not interference. Roughly
-    // double or roughly half the expected field is a nearby magnet, not
-    // sensor noise.
-    const ratio = this.liveFieldMicrotesla / (model.nanotesla / 1000);
-    this.magneticInterference = ratio > 1.8 || ratio < 0.55;
+    this.magneticInterference = quality.interference;
+    // Doubt is worth more than a warning: the heading filter leans on the
+    // gyroscope instead of a magnetometer it has reason to distrust.
+    this.orientation.magneticTrust = quality.confidence;
   }
 
   private currentBasis(): CameraBasis {
