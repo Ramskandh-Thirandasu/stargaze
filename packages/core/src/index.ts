@@ -18,6 +18,7 @@
 
 export * from './angles.js';
 export * from './time.js';
+export * from './timetravel.js';
 export * from './coords.js';
 export * from './apparent.js';
 export * from './catalog.js';
