@@ -11,6 +11,7 @@ import type {
   StarNamesJson,
 } from '../src/catalog.js';
 import type { DeclinationGridJson } from '../src/declination.js';
+import type { DeepSkyJson } from '../src/deepsky.js';
 
 const here = fileURLToPath(new URL('.', import.meta.url));
 
@@ -24,6 +25,7 @@ export const starsJson = data('stars.json') as StarCatalogJson;
 export const namesJson = data('names.json') as StarNamesJson;
 export const constellationsJson = data('constellations.json') as ConstellationJson;
 export const declinationJson = data('declination.json') as DeclinationGridJson;
+export const deepSkyJson = data('deepsky.json') as DeepSkyJson;
 
 export interface ReferenceRow {
   utc: string;

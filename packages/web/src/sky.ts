@@ -14,6 +14,9 @@ import {
   combineAngles,
   countBrighterThan,
   createHorizontalBuffer,
+  deepSkyDesignation,
+  deepSkyLabel,
+  DEEP_SKY_TYPE_NAMES,
   equatorialToHorizontal,
   julianDate,
   limitingMagnitude,
@@ -38,7 +41,7 @@ import type { SkyData } from './data.js';
 import type { Position } from './sensors.js';
 import { starLabel } from './data.js';
 
-export type ObjectKind = 'planet' | 'moon' | 'sun' | 'star';
+export type ObjectKind = 'planet' | 'moon' | 'sun' | 'star' | 'deepsky';
 
 export interface SkyObject {
   name: string;
@@ -50,13 +53,21 @@ export interface SkyObject {
   altitude: number;
   azimuth: number;
   magnitude: number;
-  /** Degrees across. Zero for anything that is a point source in practice. */
+  /** Degrees across. Zero for anything that is a point source in practice.
+   *  For a deep-sky object this is the long axis; see `angularMinor`. */
   angularDiameter: number;
   /** Distance, in the unit named by `distanceUnit`. */
   distance: number;
   distanceUnit: 'au' | 'km';
   illumination?: number;
   phase?: number;
+  /** Deep-sky only: the short axis, degrees. Nebulae and galaxies are not
+   *  round, and drawing M31 as a circle would be off by a factor of three. */
+  angularMinor?: number;
+  /** Deep-sky only: every catalogue number it has, e.g. "M31 · NGC 224". */
+  designation?: string;
+  /** Deep-sky only: "Galaxy", "Globular cluster", and so on. */
+  objectType?: string;
 }
 
 export interface SkyFrame {
@@ -250,6 +261,35 @@ export class SkyModel {
       });
     }
 
+    // Deep-sky objects ride the same path as the planets rather than the star
+    // catalogue's bulk transform: there are a few dozen of them, they carry
+    // strings, and they need a per-object size. No proper motion and no
+    // diurnal parallax -- a galaxy is far enough away that both are zero.
+    for (const object of this.data.deepSky) {
+      const ofDate = precessFromJ2000(object.ra, object.dec, jd);
+      const apparent = applyApparentPlace(ofDate.ra, ofDate.dec, terms);
+      let horizontal = equatorialToHorizontal(apparent.ra, apparent.dec, lst, observer.latitude);
+      if (refract) horizontal = applyRefraction(horizontal);
+
+      objects.push({
+        name: deepSkyLabel(object),
+        kind: 'deepsky',
+        ra: apparent.ra,
+        dec: apparent.dec,
+        altitude: horizontal.altitude,
+        azimuth: horizontal.azimuth,
+        magnitude: object.mag,
+        angularDiameter: object.major,
+        angularMinor: object.minor,
+        // The catalogue has no distances and the published ones disagree by
+        // more than they agree, so the info card says so rather than guessing.
+        distance: 0,
+        distanceUnit: 'au',
+        designation: deepSkyDesignation(object),
+        objectType: DEEP_SKY_TYPE_NAMES[object.type],
+      });
+    }
+
     return objects;
   }
 }
@@ -290,7 +330,9 @@ export function tonight(frame: SkyFrame, data: SkyData, limit = 30): TonightEntr
       detail:
         object.kind === 'moon'
           ? `${Math.round((object.illumination ?? 0) * 100)}% lit`
-          : 'Planet',
+          : object.kind === 'deepsky'
+            ? `${object.objectType} · ${object.designation}`
+            : 'Planet',
       magnitude: object.magnitude,
       altitude: object.altitude,
       azimuth: object.azimuth,
@@ -375,6 +417,32 @@ export function describe(index: number, frame: SkyFrame, data: SkyData): ObjectD
           ? RISE_SET_ALTITUDE.sun
           : RISE_SET_ALTITUDE.star,
     );
+
+    if (object.kind === 'deepsky') {
+      const arcmin = (degrees: number): string => `${(degrees * 60).toFixed(0)}'`;
+      return {
+        title: object.name,
+        subtitle: object.designation ?? '',
+        chips: [
+          object.objectType ?? 'Deep sky',
+          object.altitude > 0 ? 'Above horizon' : 'Below horizon',
+        ],
+        stats: [
+          ['Magnitude', object.magnitude.toFixed(1)],
+          ['Altitude', degrees(object.altitude)],
+          ['Azimuth', degrees(object.azimuth)],
+          [
+            'Apparent size',
+            `${arcmin(object.angularDiameter)} × ${arcmin(object.angularMinor ?? object.angularDiameter)}`,
+          ],
+          ['Rises', events.circumpolar ? 'always up' : clock(events.rise)],
+          ['Sets', events.circumpolar ? 'never' : clock(events.set)],
+        ],
+        // Why the magnitude flatters it: a star puts all its light in one
+        // point, this spreads the same number across a patch of sky.
+        footer: 'Extended, not a point -- it looks fainter than the magnitude suggests.',
+      };
+    }
 
     return {
       title: object.name,
@@ -503,7 +571,12 @@ export function search(
     altitude > 0 ? base : `${base} · below the horizon`;
 
   frame.objects.forEach((object, index) => {
-    const score = rank(object.name);
+    // A deep-sky object answers to its catalogue numbers as much as its name:
+    // "M31" and "NGC 224" have to find the Andromeda Galaxy.
+    const score = Math.min(
+      rank(object.name),
+      object.designation ? rank(object.designation) : Number.POSITIVE_INFINITY,
+    );
     if (!Number.isFinite(score)) return;
     found.push({
       score,
@@ -511,7 +584,13 @@ export function search(
         label: object.name,
         detail: horizonNote(
           object.altitude,
-          object.kind === 'moon' ? 'Moon' : object.kind === 'sun' ? 'Sun' : 'Planet',
+          object.kind === 'moon'
+            ? 'Moon'
+            : object.kind === 'sun'
+              ? 'Sun'
+              : object.kind === 'deepsky'
+                ? `${object.objectType} · ${object.designation}`
+                : 'Planet',
         ),
         magnitude: object.magnitude,
         altitude: object.altitude,
@@ -619,10 +698,22 @@ export function search(
  * Calibration
  * ------------------------------------------------------------------ */
 
-/** Objects bright enough to aim at unambiguously, for compass calibration. */
+/**
+ * Objects bright enough to aim at unambiguously, for compass calibration.
+ *
+ * Deep-sky objects are excluded however bright: the Pleiades clears the
+ * magnitude bar easily and is two and a half degrees wide, so nobody can put
+ * a crosshair on its centre to better than the error being measured.
+ */
 export function calibrationTargets(frame: SkyFrame, data: SkyData, limit = 8): TonightEntry[] {
   return tonight(frame, data, 60)
-    .filter((entry) => entry.altitude > 12 && entry.altitude < 78 && entry.magnitude < 2)
+    .filter(
+      (entry) =>
+        entry.kind !== 'deepsky' &&
+        entry.altitude > 12 &&
+        entry.altitude < 78 &&
+        entry.magnitude < 2,
+    )
     .slice(0, limit);
 }
 
