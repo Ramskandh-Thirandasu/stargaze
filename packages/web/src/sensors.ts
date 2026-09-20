@@ -32,6 +32,11 @@ export interface OrientationSample {
    *  magnetometer one. Only ever true where the device has a gyroscope and
    *  the heading was absolute to begin with. */
   fused: boolean;
+  /** True when the heading is already referenced to TRUE north, so adding
+   *  magnetic declination would count it twice. Safari's webkitCompassHeading
+   *  is true-north whenever location services are on; Android's rotation
+   *  vector and a bare `alpha` are magnetic and still need the correction. */
+  trueNorth: boolean;
 }
 
 /* ------------------------------------------------------------------ *
@@ -147,6 +152,10 @@ export class OrientationSource {
   /** False when readings are relative to wherever the phone happened to start. */
   absolute = false;
 
+  /** True while the platform is handing us true-north headings -- see
+   *  OrientationSample.trueNorth. */
+  trueNorth = false;
+
   /** Set once the gyroscope has reported a genuine turn. */
   gyro = false;
 
@@ -215,9 +224,15 @@ export class OrientationSource {
       // a counter-clockwise rotation. They run in opposite directions.
       alpha = 360 - webkitHeading;
       this.absolute = true;
+      // Core Motion has already rotated this onto true north using the same
+      // world magnetic model we carry -- applying declination again would
+      // double it, which is up to 15 degrees of silent error depending on
+      // where you are standing.
+      this.trueNorth = true;
     } else {
       alpha = event.alpha;
       this.absolute = event.absolute === true || this.eventName === 'deviceorientationabsolute';
+      this.trueNorth = false;
     }
 
     if (alpha === null || event.beta === null || event.gamma === null) return;
@@ -238,6 +253,7 @@ export class OrientationSource {
       screenAngle: screenAngle(),
       absolute: this.absolute,
       fused: this.absolute && this.fusion.usingGyro,
+      trueNorth: this.trueNorth,
     });
   }
 

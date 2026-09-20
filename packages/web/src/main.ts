@@ -38,6 +38,7 @@ import {
   requestPosition,
   isSecureContextForSensors,
   screenAngle,
+  type OrientationSample,
   type PermissionState,
   type Position,
 } from './sensors.js';
@@ -134,7 +135,7 @@ class StarGaze {
 
   private readonly orientation = new OrientationSource();
   private readonly heading = new HeadingFilter(0.18);
-  private latest: { alpha: number; beta: number; gamma: number; screenAngle: number } | null = null;
+  private latest: OrientationSample | null = null;
 
   /** Set once the native rotation-vector sensor (RotationVectorPlugin.java)
    *  starts reporting -- Android only, and only where the hardware has that
@@ -978,13 +979,21 @@ class StarGaze {
     }
 
     if (this.mode === 'sensors' && this.latest) {
-      const smoothed = this.heading.push(this.latest.alpha);
+      // An absolute heading has already been through the fusion filter in
+      // sensors.ts; smoothing it again here only adds lag. A relative one
+      // comes through raw and still needs it.
+      const alpha = this.latest.absolute
+        ? this.latest.alpha
+        : this.heading.push(this.latest.alpha);
       return basisFromDeviceOrientation({
-        alpha: smoothed,
+        alpha,
         beta: this.latest.beta,
         gamma: this.latest.gamma,
         screenAngle: this.latest.screenAngle,
-        declination,
+        // Safari hands us true north already -- see OrientationSample.trueNorth.
+        declination: this.latest.trueNorth
+          ? this.settings.northOffset
+          : declination,
       });
     }
 
