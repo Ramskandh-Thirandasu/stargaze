@@ -19,12 +19,10 @@ Try it: https://ramskandh-thirandasu.github.io/stargaze/
 ## What it does
 
 - 8,871 stars down to magnitude 6.5, all 88 constellations, the planets, and the Moon with its phase
-- 29 Messier objects, the galaxies and nebulae you can actually pick out by eye
-- Four bright asteroids, and meteor shower radiants while a shower is running
-- Tracking: pick something and it points you at it, including when it's behind you
-- It checks whether it's actually looking at sky, and says so when it isn't
+- 29 Messier objects, four bright asteroids, and meteor shower radiants while a shower is running
+- Pick something and it points you at it, including when it's behind you
 - A camera mode that draws the labels over the live camera feed
-- Compass calibration, and the gyroscope smooths out the heading so the sky doesn't jitter
+- Compass calibration, with the gyroscope smoothing the heading so the sky doesn't jitter
 - Scrub the time forwards and back to see the sky on any date
 - Search by name, and a Tonight list of what's above the horizon right now
 - Drag mode, so you can look around on a laptop with no sensors
@@ -47,13 +45,13 @@ All of it runs on the device, so your location and camera never leave your phone
 ## What it doesn't do
 
 - The compass is the weak point. Phone magnetometers are usually 5 to 15 degrees off, which is 10 to 30 Moon widths. That's what the calibration screen is for, but you have to use it.
-- Metal and electronics make it worse. Indoors or in a car the heading can be badly wrong. The app warns you when the readings look unstable, but it can't fix them.
-- The catalogue stops at magnitude 6.5, which is roughly what your eyes manage under a genuinely dark sky. The default view is set to 4.5 so it isn't a mess in town; turn the slider up when you're somewhere dark. If you want a catalogue deeper than your eyes go, use Stellarium.
-- It can't see a roof. Pointing at a ceiling, the stars really are up there and the app will draw them. It now watches the camera, GPS accuracy and the magnetic field to work out whether it's looking at open sky, and dims the overlay with a note when it doubts it. Those thresholds are guesses I haven't been able to check against a real camera yet, so Settings has a "Sky check" panel showing the live numbers: point it at the sky, then at a ceiling, and the gap between the readings is where the threshold belongs.
+- Metal and electronics make that worse. Indoors or in a car the heading can be badly wrong. The app warns you when the readings look unstable, but it can't fix them.
+- The catalogue stops at magnitude 6.5, roughly what your eyes manage under a genuinely dark sky. The view defaults to 4.5 so it isn't a mess in town, so turn the slider up when you're somewhere dark. If you want to go deeper than your eyes do, use Stellarium.
+- It can't see a roof. Point at a ceiling and the stars really are up there, so it draws them. It watches the camera, GPS accuracy and the magnetic field to work out whether it's looking at open sky, and dims the overlay with a note when it doubts it. Those thresholds are guesses I haven't checked against a real camera yet, so Settings has a Sky check panel showing the live numbers. Point it at the sky, then at a ceiling, and the gap between the readings is where the threshold belongs.
 - On iOS you have to tap the page once before motion works. Safari won't grant the orientation permission without a gesture.
-- Uranus and Neptune obey the same magnitude rule as everything else. Uranus (~5.7) shows up once you turn the limit past it, which is honest since it genuinely is a naked-eye object under a dark sky. Neptune (~7.9) never clears 6.5, so it's calculated and searchable but in practice never drawn.
+- Neptune sits around magnitude 7.9, past the catalogue limit, so it's calculated and searchable but in practice never drawn. Uranus (about 5.7) turns up once you raise the limit past it, which is fair, since it genuinely is a naked-eye object under a dark sky.
 
-That last one is a rule I stuck to: nothing disappears silently. Things that are up but washed out by daylight or a bright Moon get dimmed and labelled instead of removed.
+Nothing disappears silently, though. Things that are up but washed out by daylight or a bright Moon get dimmed and labelled rather than removed.
 
 ## Running it
 
@@ -91,18 +89,15 @@ npm run ios:sync
 npm run ios:open
 ```
 
-Needs a Mac and Xcode. You have to set a signing team on the App target yourself, and you want a real device rather than the Simulator, which has no camera or magnetometer and so only ever shows the drag fallback. Full notes, including the app icon that still needs replacing, are in [docs/ios-build.md](docs/ios-build.md).
+Needs a Mac and Xcode, and you have to set a signing team on the App target yourself. Use a real device rather than the Simulator, which has no camera or magnetometer and so only ever shows the drag fallback. Fuller notes are in [docs/ios-build.md](docs/ios-build.md).
 
 ### Deploying
 
-GitHub is where the code lives. Two things happen on every push to `main`:
+Every push to `main` does two things. `.github/workflows/pages.yml` builds and publishes to GitHub Pages, and `.github/workflows/sync.yml` force-pushes every branch and tag to the GitLab mirror at [gitlab.com/Ramskandh-Thirandasu/star-gaze](https://gitlab.com/Ramskandh-Thirandasu/star-gaze), which runs its own `.gitlab-ci.yml` and publishes GitLab Pages from the same commit.
 
-- `.github/workflows/pages.yml` builds and publishes to GitHub Pages.
-- `.github/workflows/sync.yml` force-pushes every branch and tag to the GitLab mirror at [gitlab.com/Ramskandh-Thirandasu/star-gaze](https://gitlab.com/Ramskandh-Thirandasu/star-gaze), which runs `.gitlab-ci.yml` and publishes GitLab Pages from the same commit.
+The sync only goes one way. Anything committed directly in GitLab gets overwritten by the next push from GitHub, `.gitlab-ci.yml` included, so edit that file here rather than in GitLab's web IDE.
 
-The sync is one-way. Anything committed directly in GitLab gets overwritten by the next push from GitHub, `.gitlab-ci.yml` included, so edit that file here rather than in GitLab's web IDE.
-
-Both hosts serve the same bundle unmodified. The Vite `base` is `./` and the manifest and service worker use relative paths throughout, so the app doesn't care whether it's served from `/stargaze/` or `/star-gaze/`.
+Both hosts serve the same bundle unmodified. The Vite `base` is `./` and the manifest and service worker use relative paths, so the app doesn't care whether it's served from `/stargaze/` or `/star-gaze/`.
 
 ### Rebuilding the star data
 
@@ -151,7 +146,7 @@ These are compiled into the app at build time by the scripts in `tools/`. None o
 | Planetary orbital elements | [NASA JPL, Approximate Positions of the Planets](https://ssd.jpl.nasa.gov/planets/approx_pos.html), public domain |
 | Magnetic declination | [IGRF-14](https://www.ngdc.noaa.gov/IAGA/vmod/igrf.html), IAGA Working Group V-MOD via NOAA NCEI |
 
-Gzipped the whole data set is about 180 KB, most of it the star catalogue. That's up from 56 KB at magnitude 4.5: nine times the stars for a bit over three times the bytes, because positions are stored to three decimals rather than four. Still small enough to ship offline, which is the point. The reference positions used in the tests come from [JPL Horizons](https://ssd.jpl.nasa.gov/horizons/).
+Gzipped, the whole data set is about 180 KB, most of it the star catalogue. Small enough to ship offline, which is the point. The reference positions used in the tests come from [JPL Horizons](https://ssd.jpl.nasa.gov/horizons/).
 
 ## AI usage
 
