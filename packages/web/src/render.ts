@@ -80,6 +80,9 @@ const PLANET_COLOR: Record<string, string> = {
  */
 const DEEP_SKY_COLOR = '154, 214, 196';
 
+/** Radiants get a warm colour of their own: not a star, not a smudge. */
+const SHOWER_COLOR = '240, 176, 108';
+
 /**
  * Keep a centre-aligned label fully on screen.
  *
@@ -339,6 +342,11 @@ export class SkyRenderer {
         return;
       }
 
+      if (object.kind === 'shower') {
+        this.drawRadiant(object, point, viewport, index, frame.limitingMagnitude, options);
+        return;
+      }
+
       const color = PLANET_COLOR[object.name] ?? '#ffffff';
 
       // The Moon is drawn at its true angular size; everything else is a point
@@ -450,6 +458,67 @@ export class SkyRenderer {
     }
 
     this.hits.push({ x: point.x, y: point.y, index: -1 - index, radius: Math.max(rx, 10) });
+  }
+
+  /**
+   * A meteor radiant: a ring with spokes running outward from it.
+   *
+   * Drawn deliberately unlike everything else in the app, because it is the
+   * one marker that is not an object. There is nothing at a radiant to look
+   * at -- the meteors appear all over the sky and only trace back to here --
+   * so the spokes point outward to say "watch around this", and the ring is
+   * open rather than filled to avoid promising anything inside it.
+   */
+  private drawRadiant(
+    object: SkyObject,
+    point: { x: number; y: number },
+    viewport: Viewport,
+    index: number,
+    limitingMagnitude: number,
+    options: RenderOptions,
+  ): void {
+    const ctx = this.context;
+    const radius = Math.max(
+      14,
+      (object.angularDiameter / 2) * focalLength(viewport) * (Math.PI / 180),
+    );
+
+    // Same rule as the stars: a sky bright enough to hide second-magnitude
+    // meteors is a sky where this shower is not happening for the observer,
+    // whatever the calendar says.
+    const washedOut = object.magnitude > limitingMagnitude;
+    ctx.globalAlpha = washedOut ? 0.3 : 0.85;
+
+    ctx.strokeStyle = `rgba(${SHOWER_COLOR},1)`;
+    ctx.lineWidth = 1.1;
+    ctx.beginPath();
+    ctx.arc(point.x, point.y, radius, 0, Math.PI * 2);
+    ctx.stroke();
+
+    for (let spoke = 0; spoke < 8; spoke += 1) {
+      const angle = (spoke * Math.PI) / 4;
+      const dx = Math.cos(angle);
+      const dy = Math.sin(angle);
+      ctx.beginPath();
+      ctx.moveTo(point.x + dx * radius * 1.25, point.y + dy * radius * 1.25);
+      ctx.lineTo(point.x + dx * radius * 1.9, point.y + dy * radius * 1.9);
+      ctx.stroke();
+    }
+
+    // Labelled with the rate, because "Perseids" alone does not tell anyone
+    // whether it is worth staying out. Suppressed when washed out, same as
+    // the deep-sky labels: no confident name over sky that is not delivering.
+    if (options.showLabels && !washedOut) {
+      ctx.fillStyle = `rgba(${SHOWER_COLOR},0.85)`;
+      const label = `${object.name} ~${object.hourlyRate}/hr`;
+      ctx.fillText(
+        label,
+        clampLabelX(ctx, label, point.x, this.width),
+        point.y - radius * 1.9 - 8,
+      );
+    }
+
+    this.hits.push({ x: point.x, y: point.y, index: -1 - index, radius });
   }
 
   /** Darken the unlit part of the Moon's disc. */

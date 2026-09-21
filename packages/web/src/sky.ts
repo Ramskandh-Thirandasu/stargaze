@@ -11,9 +11,11 @@ import {
   apparentTerms,
   applyApparentPlace,
   applyDiurnalParallax,
+  activeShowers,
   asteroidPosition,
   asteroidsValidAt,
   ASTEROIDS,
+  calendarDayLabel,
   combineAngles,
   countBrighterThan,
   createHorizontalBuffer,
@@ -25,6 +27,7 @@ import {
   limitingMagnitude,
   localSiderealTime,
   magneticDeclination,
+  METEOR_MAGNITUDE,
   moonPosition,
   planetPosition,
   precessCatalog,
@@ -44,7 +47,7 @@ import type { SkyData } from './data.js';
 import type { Position } from './sensors.js';
 import { starLabel } from './data.js';
 
-export type ObjectKind = 'planet' | 'asteroid' | 'moon' | 'sun' | 'star' | 'deepsky';
+export type ObjectKind = 'planet' | 'asteroid' | 'moon' | 'sun' | 'star' | 'deepsky' | 'shower';
 
 export interface SkyObject {
   name: string;
@@ -72,6 +75,12 @@ export interface SkyObject {
   designation?: string;
   /** Deep-sky only: "Galaxy", "Globular cluster", and so on. */
   objectType?: string;
+  /** Meteor shower only: when it peaks, e.g. "12 Aug". */
+  peak?: string;
+  /** Meteor shower only: published zenithal hourly rate at the peak. */
+  hourlyRate?: number;
+  /** Meteor shower only: days to the peak, negative once it has passed. */
+  daysToPeak?: number;
 }
 
 export interface SkyFrame {
@@ -148,7 +157,7 @@ export class SkyModel {
       when,
     );
 
-    const objects = this.computeObjects(jd, lst, observer, refract);
+    const objects = this.computeObjects(when, jd, lst, observer, refract);
     const sunAltitude = objects.find((object) => object.kind === 'sun')?.altitude ?? -90;
     const moon = objects.find((object) => object.kind === 'moon');
 
@@ -183,6 +192,7 @@ export class SkyModel {
   }
 
   private computeObjects(
+    when: Date,
     jd: number,
     lst: number,
     observer: Position,
@@ -324,8 +334,53 @@ export class SkyModel {
       });
     }
 
+    // Meteor radiants, but only while their shower is running: a marker for
+    // the Perseids in February would be pointing at a patch of Perseus with
+    // nothing coming out of it. Position is the radiant, not an object -- see
+    // showers.ts for why it still carries a magnitude.
+    for (const { shower, daysToPeak } of activeShowers(when)) {
+      const ofDate = precessFromJ2000(shower.ra, shower.dec, jd);
+      const apparent = applyApparentPlace(ofDate.ra, ofDate.dec, terms);
+      let horizontal = equatorialToHorizontal(apparent.ra, apparent.dec, lst, observer.latitude);
+      if (refract) horizontal = applyRefraction(horizontal);
+
+      objects.push({
+        name: shower.name,
+        kind: 'shower',
+        ra: apparent.ra,
+        dec: apparent.dec,
+        altitude: horizontal.altitude,
+        azimuth: horizontal.azimuth,
+        magnitude: METEOR_MAGNITUDE,
+        // A few degrees across: a radiant is a region the tracks point back
+        // to, not a spot, and drawing it as a dot would invite the user to
+        // stare at one place instead of the half of the sky around it.
+        angularDiameter: 6,
+        distance: 0,
+        distanceUnit: 'au',
+        designation: shower.code,
+        objectType: 'Meteor shower',
+        peak: calendarDayLabel(shower.peak),
+        hourlyRate: shower.zhr,
+        daysToPeak,
+      });
+    }
+
     return objects;
   }
+}
+
+/**
+ * The one-line summary of a shower: when it is best and roughly how many.
+ *
+ * "Peaks 12 Aug" rather than a countdown, because the number that matters to
+ * someone standing outside is the date they should come back on.
+ */
+function showerDetail(object: SkyObject): string {
+  const rate = `~${object.hourlyRate}/hr at peak`;
+  const days = object.daysToPeak ?? 0;
+  if (days === 0) return `Meteor shower · peaks tonight · ${rate}`;
+  return `Meteor shower · peaks ${object.peak} · ${rate}`;
 }
 
 export interface TonightEntry {
@@ -368,7 +423,9 @@ export function tonight(frame: SkyFrame, data: SkyData, limit = 30): TonightEntr
             ? `${object.objectType} · ${object.designation}`
             : object.kind === 'asteroid'
               ? `Asteroid · ${object.designation}`
-              : 'Planet',
+              : object.kind === 'shower'
+                ? showerDetail(object)
+                : 'Planet',
       magnitude: object.magnitude,
       altitude: object.altitude,
       azimuth: object.azimuth,
@@ -453,6 +510,34 @@ export function describe(index: number, frame: SkyFrame, data: SkyData): ObjectD
           ? RISE_SET_ALTITUDE.sun
           : RISE_SET_ALTITUDE.star,
     );
+
+    if (object.kind === 'shower') {
+      const days = object.daysToPeak ?? 0;
+      return {
+        title: object.name,
+        subtitle: `Radiant · ${object.designation}`,
+        chips: [
+          'Meteor shower',
+          object.altitude > 0 ? 'Radiant up' : 'Radiant below horizon',
+        ],
+        stats: [
+          ['Peak', object.peak ?? '—'],
+          [
+            'Best',
+            days > 0 ? `in ${days} day${days === 1 ? '' : 's'}` : days === 0 ? 'tonight' : `${-days} days ago`,
+          ],
+          ['Rate at peak', `~${object.hourlyRate}/hr`],
+          ['Altitude', degrees(object.altitude)],
+          ['Azimuth', degrees(object.azimuth)],
+          ['Rises', events.circumpolar ? 'always up' : clock(events.rise)],
+        ],
+        // The two things that most often disappoint someone who went out for
+        // a shower, said before they go rather than after.
+        footer:
+          'Meteors appear anywhere in the sky and only seem to come from here -- ' +
+          'the quoted rate assumes a dark sky with the radiant overhead.',
+      };
+    }
 
     if (object.kind === 'deepsky') {
       const arcmin = (degrees: number): string => `${(degrees * 60).toFixed(0)}'`;
@@ -642,7 +727,9 @@ export function search(
                 ? `${object.objectType} · ${object.designation}`
                 : object.kind === 'asteroid'
                   ? `Asteroid · ${object.designation}`
-                  : 'Planet',
+                  : object.kind === 'shower'
+                    ? showerDetail(object)
+                    : 'Planet',
         ),
         magnitude: object.magnitude,
         altitude: object.altitude,
@@ -761,7 +848,10 @@ export function calibrationTargets(frame: SkyFrame, data: SkyData, limit = 8): T
   return tonight(frame, data, 60)
     .filter(
       (entry) =>
+        // Neither a smudge nor a radiant is a point you can put a crosshair
+        // on, which is the whole job here.
         entry.kind !== 'deepsky' &&
+        entry.kind !== 'shower' &&
         entry.altitude > 12 &&
         entry.altitude < 78 &&
         entry.magnitude < 2,
