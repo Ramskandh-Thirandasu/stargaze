@@ -28,4 +28,5 @@ export * from './moon.js';
 export * from './declination.js';
 export * from './orientation.js';
 export * from './projection.js';
+export * from './tracking.js';
 export * from './visibility.js';
