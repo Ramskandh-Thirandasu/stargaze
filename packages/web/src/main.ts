@@ -22,8 +22,10 @@ import {
   magneticFieldIntensity,
   MagneticFieldMonitor,
   normalize360,
+  skyConfidence,
   type CameraBasis,
   type ClockBounds,
+  type SkyConfidence,
   type Viewport,
 } from '@stargaze/core';
 
@@ -43,6 +45,7 @@ import {
   type Position,
 } from './sensors.js';
 import { startRotationVector } from './native.js';
+import { SkyBanner, SkySampler } from './skycheck.js';
 import { SkyRenderer, type RenderOptions } from './render.js';
 import {
   calibrate,
@@ -152,6 +155,22 @@ class StarGaze {
    *  false everywhere else, since there is nothing to compare. */
   private magneticInterference = false;
 
+  /* --- Is there actually sky in front of the lens? ---------------- *
+   * The geometry cannot tell a ceiling from a sky; the outward-facing
+   * sensors half can. skyconfidence.ts in core weighs them, skycheck.ts
+   * produces the camera half and shows the answer. */
+
+  private readonly skySampler = new SkySampler();
+  private skyBanner!: SkyBanner;
+  private sky: SkyConfidence = { confidence: 1, warn: false, reason: null };
+  /** Latest MagneticQuality.confidence, 1 where nothing is measuring. */
+  private magneticConfidence = 1;
+  /** Set when the user has told us this really is the sky. Cleared again the
+   *  moment the evidence agrees with them, so the check still works the next
+   *  time they walk indoors. */
+  private skyOverride = false;
+  /* --------------------------------------------------------------- */
+
   private permissions: Record<'camera' | 'location' | 'motion', PermissionState> = {
     camera: 'unknown',
     location: 'unknown',
@@ -179,6 +198,7 @@ class StarGaze {
   async start(root: HTMLElement): Promise<void> {
     this.shell = buildShell(root);
     this.renderer = new SkyRenderer(this.shell.canvas);
+    this.skyBanner = new SkyBanner(root);
 
     try {
       this.data = await loadSkyData();
@@ -927,6 +947,77 @@ class StarGaze {
     );
     this.shell.showTime(this.frame.when, this.timeOffsetMs, this.atClockLimit);
     this.updateMagneticInterference();
+    this.updateSkyConfidence();
+  }
+
+  /* --- Is there actually sky in front of the lens? ---------------- */
+
+  /**
+   * Weigh the camera, the location fix and the magnetometer, then say so.
+   *
+   * Runs from updateSky rather than the frame loop: once a second is plenty
+   * for noticing a phone being lowered, and it keeps a canvas readback off
+   * the render path entirely.
+   *
+   * What comes of it is a dimmed overlay and one line of text. Never a hidden
+   * sky -- being wrong about a roof has to cost the user a sentence, not the
+   * app. Which is also why the override below is on the warning itself,
+   * rather than buried in settings where nobody would find it.
+   */
+  private updateSkyConfidence(): void {
+    if (this.permissions.camera === 'granted' && this.shell.video.srcObject) {
+      this.skySampler.update(this.shell.video, performance.now());
+    } else {
+      this.skySampler.clear();
+    }
+
+    this.sky = skyConfidence({
+      frame: this.skySampler.statistics,
+      sunAltitude: this.frame?.sunAltitude ?? -90,
+      gpsAccuracyMetres: this.observer.accuracy,
+      magneticConfidence: this.magneticConfidence,
+    });
+
+    if (!this.sky.warn) this.skyOverride = false;
+    const doubt = this.sky.warn && !this.skyOverride;
+
+    // Dimmed in proportion to the doubt, and never past the point of being
+    // readable: the objects are still there, still tappable, still named.
+    this.shell.canvas.style.opacity = doubt
+      ? (0.45 + 0.55 * this.sky.confidence).toFixed(2)
+      : '1';
+
+    const lines: string[] = [];
+    if (this.magneticInterference) {
+      // Loud, because the alternative is telling someone an apartment block
+      // is north and letting them believe it.
+      lines.push(
+        'Compass unreliable: something nearby is pulling the field off true north, ' +
+          'so every bearing and the whole sky alignment are wrong until you move away from it.',
+      );
+    }
+    if (doubt) {
+      lines.push(
+        `This may not be open sky -- ${this.sky.reason}. Nothing is hidden; the overlay is ` +
+          'just dimmed while there is doubt.',
+      );
+    }
+
+    this.skyBanner.show(
+      lines.length > 0 ? lines.join(' ') : null,
+      doubt
+        ? [
+            {
+              label: 'This is the sky',
+              onPress: () => {
+                this.skyOverride = true;
+                this.shell.canvas.style.opacity = '1';
+                this.shell.toast('Taking your word for it.', 2600);
+              },
+            },
+          ]
+        : [],
+    );
   }
 
   /**
@@ -938,6 +1029,7 @@ class StarGaze {
   private updateMagneticInterference(): void {
     if (this.liveFieldMicrotesla === null) {
       this.magneticInterference = false;
+      this.magneticConfidence = 1;
       return;
     }
 
@@ -954,6 +1046,7 @@ class StarGaze {
     );
 
     this.magneticInterference = quality.interference;
+    this.magneticConfidence = quality.confidence;
     // Doubt is worth more than a warning: the heading filter leans on the
     // gyroscope instead of a magnetometer it has reason to distrust.
     this.orientation.magneticTrust = quality.confidence;
