@@ -399,7 +399,10 @@ export function buildShell(root: HTMLElement): Shell {
           <p class="help" style="line-height:1.6;margin-top:10px">
             Star positions, magnitudes, colours and names: <a href="https://github.com/astronexus/HYG-Database" target="_blank" rel="noopener">HYG Database v4.0</a>, David Nash / astronexus (CC BY-SA 4.0).
             Constellation figures: <a href="https://github.com/Stellarium/stellarium" target="_blank" rel="noopener">Stellarium</a> sky culture modern_iau (CC BY-SA 4.0).
+            Deep-sky objects: <a href="https://github.com/mattiaverga/OpenNGC" target="_blank" rel="noopener">OpenNGC</a>, Mattia Verga (CC BY-SA 4.0).
             Planetary elements: NASA JPL SSD, <a href="https://ssd.jpl.nasa.gov/planets/approx_pos.html" target="_blank" rel="noopener">Approximate Positions of the Planets</a> (public domain).
+            Asteroid elements: NASA JPL <a href="https://ssd.jpl.nasa.gov/tools/sbdb_lookup.html" target="_blank" rel="noopener">Small-Body Database</a> (public domain).
+            Meteor shower radiants and rates: <a href="https://www.imo.net/resources/calendar/" target="_blank" rel="noopener">IMO Working List of Visual Meteor Showers</a>.
             Magnetic declination: <a href="https://www.ngdc.noaa.gov/IAGA/vmod/igrf.html" target="_blank" rel="noopener">IGRF-14</a>, IAGA Working Group V-MOD via NOAA NCEI.
           </p>
         </div>
