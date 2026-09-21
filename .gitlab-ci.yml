@@ -1,0 +1,53 @@
+# GitLab Pages.
+#
+# This repository lives on GitHub; .github/workflows/sync.yml mirrors every
+# branch and tag here on push, and this file rides along with it. So the way
+# to change this pipeline is to edit it on GitHub -- an edit made in GitLab's
+# web IDE is overwritten by the next sync.
+#
+# The app is built with a relative base (see packages/web/vite.config.ts), so
+# the same bundle works unchanged under GitHub's /stargaze/ and GitLab's
+# /star-gaze/. Nothing here rewrites paths.
+
+stages:
+  - test
+  - deploy
+
+default:
+  image: node:20
+  # node_modules is the whole cost of this pipeline; the lockfile is the only
+  # thing that changes what lands in it.
+  cache:
+    key:
+      files:
+        - package-lock.json
+    paths:
+      - .npm/
+
+variables:
+  npm_config_cache: '$CI_PROJECT_DIR/.npm'
+
+test:
+  stage: test
+  script:
+    - npm ci
+    - npm run typecheck
+    - npm test
+  rules:
+    # Every branch that syncs over, so a broken mirror is visible here too.
+    - if: $CI_PIPELINE_SOURCE == 'push'
+
+pages:
+  stage: deploy
+  script:
+    - npm ci
+    - npm run build --workspace @stargaze/web
+    # GitLab Pages publishes whatever is in ./public, and Vite writes to
+    # packages/web/dist. The repo has no ./public of its own, so this is a
+    # move rather than a merge.
+    - mv packages/web/dist public
+  artifacts:
+    paths:
+      - public
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
