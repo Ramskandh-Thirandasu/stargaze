@@ -241,8 +241,8 @@ export function buildShell(root: HTMLElement): Shell {
         <span class="cap">Catalogue</span>
         <div class="field">
           <div class="field-head"><b>Magnitude cutoff</b><span id="mag-value">4.5</span></div>
-          <input type="range" id="mag" min="1" max="4.5" step="0.1" />
-          <span class="help">Lower this in a town. 4.5 is about what a phone manages under a dark sky.</span>
+          <input type="range" id="mag" min="1" max="6.5" step="0.1" />
+          <span class="help">Lower this in a town. 6.5 is the whole catalogue -- the naked-eye limit under a genuinely dark sky.</span>
         </div>
         <div class="row"><b style="font-size:14.5px;font-weight:500">Constellation lines</b>
           <button class="switch" id="t-lines" type="button" aria-pressed="true"></button></div>

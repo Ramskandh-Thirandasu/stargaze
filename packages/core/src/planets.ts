@@ -66,17 +66,16 @@ export const ALL_PLANETS: readonly PlanetName[] = [
 ];
 
 /**
- * The planets the app draws: the five that have been visible to people since
- * before anyone wrote any of this down.
+ * The planets the app draws -- every one of them bar Earth.
  *
- * Uranus (magnitude ~5.7) and Neptune (~7.9) are deliberately absent. Neither
- * can be photographed with a phone from the ground, and a marker floating over
- * a patch of sky with nothing in it is worse than no marker -- it teaches the
- * user the overlay is unreliable, right when they are trying to decide whether
- * to trust it.
- *
- * The elements for both are still in `planets.json` and still tested; this is a
- * decision about what to show, not about what the maths can do.
+ * Uranus (magnitude ~5.7) is a naked-eye object under a genuinely dark sky, so
+ * it belongs in the same list as the five everyone has always been able to see.
+ * Neptune (~7.9) never has been, and including it here does not pretend
+ * otherwise: nothing in this list is drawn unless it clears the user's
+ * magnitude setting, and the sky's own limiting magnitude dims whatever is
+ * below it (see visibility.ts). Neptune therefore ships computed, listed, and
+ * in practice never drawn -- which is the honest answer rather than a decision
+ * taken for the user one level too early.
  */
 export const VISIBLE_PLANETS: readonly PlanetName[] = [
   'Mercury',
@@ -84,6 +83,8 @@ export const VISIBLE_PLANETS: readonly PlanetName[] = [
   'Mars',
   'Jupiter',
   'Saturn',
+  'Uranus',
+  'Neptune',
 ];
 
 export interface Vec3 {

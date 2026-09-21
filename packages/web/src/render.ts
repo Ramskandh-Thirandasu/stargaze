@@ -61,6 +61,8 @@ const PLANET_COLOR: Record<string, string> = {
   Mars: '#ff8a5c',
   Jupiter: '#ffe0b0',
   Saturn: '#f0d9a8',
+  Uranus: '#a8e4e0',
+  Neptune: '#8fb4f0',
   Sun: '#fff1c4',
   Moon: '#f2e6ce',
 };
@@ -313,6 +315,11 @@ export class SkyRenderer {
 
     frame.objects.forEach((object, index) => {
       if (object.altitude < -2) return;
+      // One rule for the whole sky: nothing fainter than the user's setting
+      // gets drawn, stars and planets and smudges alike. The Sun and Moon
+      // clear it by twenty magnitudes, so in practice this is what keeps
+      // Uranus, Neptune and the asteroids out of the default view.
+      if (object.magnitude > options.magnitudeLimit) return;
 
       const direction = directionFromHorizontal(object.altitude, object.azimuth);
       if (!couldBeVisible(direction, basis, cosCone)) return;
@@ -400,11 +407,6 @@ export class SkyRenderer {
     limitingMagnitude: number,
     options: RenderOptions,
   ): void {
-    // Most of the Messier list needs binoculars. Gating on the same setting
-    // the stars use keeps one rule in the app: nothing is drawn that the user
-    // has said they cannot see.
-    if (object.magnitude > options.magnitudeLimit) return;
-
     const ctx = this.context;
     const pixelsPerDegree = focalLength(viewport) * (Math.PI / 180);
 
