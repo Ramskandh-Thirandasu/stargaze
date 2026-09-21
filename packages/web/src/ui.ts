@@ -8,15 +8,22 @@
 
 import {
   DAY_MS,
+  formatDuration,
   formatOffset,
+  guide,
   HOUR_MS,
   isPresent,
+  nextEvent,
   normalize360,
+  RISE_SET_ALTITUDE,
   scrubRate,
+  washoutCause,
   type CameraBasis,
+  type Guidance,
+  type Viewport,
 } from '@stargaze/core';
 
-import type { ObjectDetail, SkyFrame, TonightEntry } from './sky.js';
+import type { ObjectDetail, ObjectKind, SkyFrame, TonightEntry } from './sky.js';
 
 const svg = (paths: string, size = 22): string =>
   `<svg viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths}</svg>`;
@@ -58,6 +65,13 @@ export interface TimeHandlers {
   onNow(): void;
 }
 
+export interface TrackTarget {
+  /** The renderer's index encoding -- see SkyFrame.positionOf. */
+  index: number;
+  /** What to call it, spelled the way the info card spells it. */
+  label: string;
+}
+
 export interface Shell {
   canvas: HTMLCanvasElement;
   video: HTMLVideoElement;
@@ -72,6 +86,7 @@ export interface Shell {
   calibrateReset: HTMLButtonElement;
 
   cardClose: HTMLButtonElement;
+  stopTrackingButton: HTMLButtonElement;
 
   magInput: HTMLInputElement;
   magValue: HTMLElement;
@@ -98,6 +113,10 @@ export interface Shell {
   /** Say which moment the sky is drawn for, and how far that is from now. */
   showTime(when: Date, offsetMs: number, atLimit: boolean): void;
   updateHud(basis: CameraBasis, frame: SkyFrame, mode: string, magneticInterference: boolean): void;
+  /** Start guiding the user onto this object. Null stops. */
+  track(target: TrackTarget | null): void;
+  /** Refresh the guidance for wherever the phone is pointed now. */
+  updateTracking(frame: SkyFrame, basis: CameraBasis, viewport: Viewport): void;
   openCard(detail: ObjectDetail): void;
   closeCard(): void;
   openSettings(): void;
@@ -132,6 +151,21 @@ export function buildShell(root: HTMLElement): Shell {
     <video id="camera" playsinline muted autoplay style="display:none"></video>
     <canvas id="sky"></canvas>
 
+    <!-- A bright camera feed washes out the chrome that sits over it. This
+         darkens only the bands the chrome occupies, in the page's own colour,
+         and leaves the middle of the sky alone. -->
+    <div class="skyscrim" aria-hidden="true"></div>
+
+    <!-- Guidance to whatever is being tracked. Outside the HUD column because
+         the arrow has to be able to sit anywhere against the screen edge, and
+         the HUD is capped at phone width even on a tablet. -->
+    <div class="tracker" id="tracker" data-open="false" aria-hidden="true">
+      <div class="track-arrow" id="track-arrow" data-behind="false">
+        <span class="track-arrow-glyph" id="track-arrow-glyph">${icons.arrow}</span>
+        <span class="mono" id="track-arrow-gap">—</span>
+      </div>
+    </div>
+
     <!-- Lit only while the sky on screen is not the sky outside. Deliberately
          impossible to miss from the corner of an eye: the failure this guards
          against is walking outside still believing the overlay. -->
@@ -147,6 +181,29 @@ export function buildShell(root: HTMLElement): Shell {
         <div class="pill glass" id="decl-pill"><span class="cap">Dec</span><span class="mono" id="decl">—</span></div>
       </div>
       <div class="spacer"></div>
+
+      <!-- The tracking readout. Sits with the time bar rather than in a sheet
+           for the same reason: while something is being followed, which way to
+           turn is part of the reading, not a setting to go and look up. -->
+      <div class="trackbar glass" id="trackbar" data-open="false" data-locked="false" data-behind="false">
+        <div class="track-head">
+          <span class="track-dot" aria-hidden="true"></span>
+          <div class="track-title">
+            <b id="track-name">—</b>
+            <span id="track-state">—</span>
+          </div>
+          <button class="iconbtn" id="track-stop" type="button" aria-label="Stop following this object">${icons.close}</button>
+        </div>
+        <div class="track-figures">
+          <span><span class="cap">Alt</span><span class="mono" id="track-alt">—</span></span>
+          <span><span class="cap">Az</span><span class="mono" id="track-az">—</span></span>
+          <span><span class="cap" id="track-event-cap">Sets</span><span class="mono" id="track-event">—</span></span>
+        </div>
+        <!-- Degrees change every frame, so only the coarse state is announced
+             -- a live region reading out a counter is unusable. -->
+        <span class="sr-only" id="track-status" role="status" aria-live="polite"></span>
+      </div>
+
       <div class="timebar glass" id="timebar" data-travelling="false">
         <div class="timerow">
           <button class="timestep mono" id="time-day-back" type="button" aria-label="Back one day">−1d</button>
@@ -184,6 +241,13 @@ export function buildShell(root: HTMLElement): Shell {
       </div>
       <div class="rule"></div>
       <div class="stats" id="card-stats"></div>
+      <!-- What the static stats above cannot say: when it is highest, and
+           whether the sky is drowning it out as you read this. -->
+      <p class="card-note" id="card-note" hidden></p>
+      <!-- Closing the card by this route keeps the object selected, so the
+           track bar takes over. The X beside the title means "done with this
+           object" and drops the guidance with it. -->
+      <button class="primary" id="card-follow" type="button" style="margin-top:20px">Follow it</button>
       <div style="display:flex;align-items:center;gap:9px;margin-top:18px;padding-top:16px;border-top:1px solid rgba(255,255,255,0.09)">
         <span style="color:var(--accent);display:flex">${icons.compass}</span>
         <span class="help" id="card-footer" style="font-size:12.5px"></span>
@@ -350,6 +414,29 @@ export function buildShell(root: HTMLElement): Shell {
   const sheetSearch = pick('sheet-search');
   const sheetCalibrate = pick('sheet-calibrate');
 
+  // Held rather than looked up: unlike the rest of the chrome, these are
+  // written on every frame the guidance is running.
+  const tracker = pick('tracker');
+  const trackArrow = pick('track-arrow');
+  const trackArrowGlyph = pick('track-arrow-glyph');
+  const trackArrowGap = pick('track-arrow-gap');
+  const trackbar = pick('trackbar');
+  const trackName = pick('track-name');
+  const trackState = pick('track-state');
+  const trackAlt = pick('track-alt');
+  const trackAz = pick('track-az');
+  const trackEventCap = pick('track-event-cap');
+  const trackEvent = pick('track-event');
+  const trackStatus = pick('track-status');
+  const cardNote = pick('card-note');
+
+  /** What is being followed, or null. */
+  let tracked: TrackTarget | null = null;
+  /** Rise and set move by minutes, not by frames -- see refreshTrackEvents. */
+  let eventsKey = '';
+  /** Only touch the live region when the coarse state actually changes. */
+  let lastStatus = '';
+
   const closeSheets = (): void => {
     sheetTonight.dataset.open = 'false';
     sheetSettings.dataset.open = 'false';
@@ -365,6 +452,12 @@ export function buildShell(root: HTMLElement): Shell {
     button.addEventListener('click', closeSheets),
   );
 
+  // Deliberately not shell.closeCard(): that clears the selection, and this
+  // is the one exit from the card that means "keep pointing me at it".
+  pick<HTMLButtonElement>('card-follow').addEventListener('click', () => {
+    card.dataset.open = 'false';
+  });
+
   const shell: Shell = {
     canvas,
     video: pick<HTMLVideoElement>('camera'),
@@ -378,6 +471,7 @@ export function buildShell(root: HTMLElement): Shell {
     calibrateConfirm: pick<HTMLButtonElement>('cal-confirm'),
     calibrateReset: pick<HTMLButtonElement>('cal-reset'),
     cardClose: pick<HTMLButtonElement>('card-close'),
+    stopTrackingButton: pick<HTMLButtonElement>('track-stop'),
 
     magInput: pick<HTMLInputElement>('mag'),
     magValue: pick('mag-value'),
@@ -552,6 +646,70 @@ export function buildShell(root: HTMLElement): Shell {
       drawCompass(compassSvg, basis.azimuth, mode);
     },
 
+    track(target) {
+      tracked = target;
+      eventsKey = '';
+      lastStatus = '';
+      trackbar.dataset.open = String(target !== null);
+      if (target) trackName.textContent = target.label;
+      if (!target) {
+        tracker.dataset.open = 'false';
+        cardNote.hidden = true;
+      }
+    },
+
+    updateTracking(frame, basis, viewport) {
+      if (!tracked) return;
+
+      const position = frame.positionOf(tracked.index);
+      const facts = trackedFacts(tracked.index, frame);
+      if (!position || !facts) {
+        // The catalogue cutoff moved under the selection, or the object went
+        // out of the frame. Say nothing rather than guess at where it went.
+        shell.track(null);
+        return;
+      }
+
+      const guidance = guide(position, basis, viewport);
+
+      trackbar.dataset.locked = String(guidance.locked);
+      trackbar.dataset.behind = String(guidance.behind);
+      // Not colour alone: the wording changes with the state, and the dot
+      // fills, and the border thickens.
+      trackbar.dataset.near = String(!guidance.locked && guidance.separation < 20);
+
+      setText(trackState, instruction(guidance, position.altitude));
+      setText(trackAlt, `${position.altitude.toFixed(1)}°`);
+      setText(trackAz, `${position.azimuth.toFixed(1)}°`);
+
+      const status = coarseStatus(guidance, position.altitude);
+      if (status !== lastStatus) {
+        lastStatus = status;
+        trackStatus.textContent = `${tracked.label}: ${status}`;
+      }
+
+      // The arrow is for finding something you cannot see. Once it is on
+      // screen the renderer's own marker is sitting on it, and a second
+      // pointer to the same place is noise.
+      tracker.dataset.open = String(!guidance.onScreen);
+      if (!guidance.onScreen) {
+        trackArrow.style.left = `${guidance.arrow.x.toFixed(1)}px`;
+        trackArrow.style.top = `${guidance.arrow.y.toFixed(1)}px`;
+        trackArrow.dataset.behind = String(guidance.behind);
+        trackArrowGlyph.style.transform = `rotate(${guidance.bearing.toFixed(1)}deg)`;
+        setText(trackArrowGap, `${guidance.separation.toFixed(0)}°`);
+      }
+
+      // Recomputed on the minute rather than on the frame: these are Date
+      // arithmetic, and none of it moves fast enough to be worth 60 Hz.
+      const key = `${tracked.index}|${Math.floor(frame.when.getTime() / 60000)}`;
+      if (key !== eventsKey) {
+        eventsKey = key;
+        refreshTrackEvents(trackEventCap, trackEvent, frame, facts, position.altitude);
+        refreshCardNote(cardNote, frame, facts, position.altitude);
+      }
+    },
+
     openCard(detail) {
       pick('card-title').textContent = detail.title;
       pick('card-sub').textContent = detail.subtitle;
@@ -568,6 +726,9 @@ export function buildShell(root: HTMLElement): Shell {
 
     closeCard() {
       card.dataset.open = 'false';
+      // Tracking and selection are one state: every path that closes the card
+      // is a path that deselected the object, so the guidance goes with it.
+      shell.track(null);
     },
 
     openSettings() {
@@ -651,6 +812,169 @@ export function buildShell(root: HTMLElement): Shell {
   };
 
   return shell;
+}
+
+/* ------------------------------------------------------------------ *
+ * Tracking readouts
+ * ------------------------------------------------------------------ */
+
+interface TrackedFacts {
+  ra: number;
+  dec: number;
+  magnitude: number;
+  kind: ObjectKind;
+  /** The horizon this object counts as risen at -- see RISE_SET_ALTITUDE. */
+  standardAltitude: number;
+}
+
+/**
+ * The tracked object's catalogue side, dug out of the frame by the same index
+ * encoding the renderer hit-tests with.
+ *
+ * Deliberately not routed through describe(): that builds a card's worth of
+ * strings, and this runs while the user is turning on the spot.
+ */
+function trackedFacts(index: number, frame: SkyFrame): TrackedFacts | null {
+  if (index < 0) {
+    const object = frame.objects[-1 - index];
+    if (!object) return null;
+    return {
+      ra: object.ra,
+      dec: object.dec,
+      magnitude: object.magnitude,
+      kind: object.kind,
+      standardAltitude:
+        object.kind === 'moon'
+          ? RISE_SET_ALTITUDE.moon
+          : object.kind === 'sun'
+            ? RISE_SET_ALTITUDE.sun
+            : RISE_SET_ALTITUDE.star,
+    };
+  }
+
+  if (index >= frame.starCount) return null;
+  return {
+    ra: frame.catalog.ra[index] as number,
+    dec: frame.catalog.dec[index] as number,
+    magnitude: frame.catalog.mag[index] as number,
+    kind: 'star',
+    standardAltitude: RISE_SET_ALTITUDE.star,
+  };
+}
+
+/**
+ * What to do with the phone, in one sentence.
+ *
+ * Turn and climb rather than a bare separation: "47 degrees away" does not
+ * tell a cold hand which way to move, and the arrow alone does not survive
+ * being glanced at. Anything under a degree is dropped -- no phone compass is
+ * good to a degree, and pretending otherwise sends people hunting a target
+ * that is already in the reticle.
+ */
+function instruction(guidance: Guidance, altitude: number): string {
+  if (guidance.locked) {
+    return altitude < 0
+      ? 'Aimed at it, but it is below the horizon.'
+      : 'Locked on. Hold still.';
+  }
+
+  const moves: string[] = [];
+  if (Math.abs(guidance.turn) >= 1) {
+    moves.push(`turn ${guidance.turn > 0 ? 'right' : 'left'} ${Math.abs(guidance.turn).toFixed(0)}°`);
+  }
+  if (Math.abs(guidance.climb) >= 1) {
+    moves.push(`look ${guidance.climb > 0 ? 'up' : 'down'} ${Math.abs(guidance.climb).toFixed(0)}°`);
+  }
+  if (moves.length === 0) return 'Almost on it.';
+
+  const sentence = `${moves[0]?.charAt(0).toUpperCase()}${moves[0]?.slice(1)}${moves[1] ? `, ${moves[1]}` : ''}.`;
+  // Behind you is the case the whole guidance exists for: at that point the
+  // object has no projection at all, and a lone arrow reads as "off to the
+  // right" when the answer is "the other way entirely".
+  return guidance.behind ? `Behind you -- ${sentence.charAt(0).toLowerCase()}${sentence.slice(1)}` : sentence;
+}
+
+/** The coarse state, for the live region. Changes rarely, unlike the degrees. */
+function coarseStatus(guidance: Guidance, altitude: number): string {
+  if (guidance.locked) return altitude < 0 ? 'aimed at it, below the horizon' : 'locked on';
+  if (guidance.behind) return 'behind you';
+  if (guidance.onScreen) return 'in view';
+  return 'off screen';
+}
+
+/**
+ * The third figure in the track bar: when it sets, or when it rises if it has
+ * not yet. Never a countdown to an event that does not happen -- a circumpolar
+ * star gets "never", not a number quietly measured against tomorrow.
+ */
+function refreshTrackEvents(
+  capElement: HTMLElement,
+  valueElement: HTMLElement,
+  frame: SkyFrame,
+  facts: TrackedFacts,
+  altitude: number,
+): void {
+  const rising = altitude <= 0;
+  const at = nextEvent(
+    rising ? 'rise' : 'set',
+    facts.ra,
+    facts.dec,
+    frame.observer,
+    frame.when,
+    facts.standardAltitude,
+  );
+
+  setText(capElement, rising ? 'Rises in' : 'Sets in');
+  setText(
+    valueElement,
+    at ? formatDuration(at.getTime() - frame.when.getTime()) : rising ? 'never here' : 'never sets',
+  );
+}
+
+/**
+ * The card's live line: when the object is highest, and whether the sky is
+ * drowning it out as you read this.
+ *
+ * The static stats above it are true for the moment the card opened; these two
+ * are the ones worth keeping current, and the second is the one the honesty
+ * rule in this app hangs on -- a card that lists a magnitude without saying
+ * the Moon has washed it out is promising something the sky is not giving.
+ */
+function refreshCardNote(
+  note: HTMLElement,
+  frame: SkyFrame,
+  facts: TrackedFacts,
+  altitude: number,
+): void {
+  const sentences: string[] = [];
+
+  const transit = nextEvent(
+    'transit',
+    facts.ra,
+    facts.dec,
+    frame.observer,
+    frame.when,
+    facts.standardAltitude,
+  );
+  if (transit) {
+    sentences.push(
+      `Highest at ${transit.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })}.`,
+    );
+  }
+
+  if (altitude <= 0) {
+    sentences.push('Below the horizon right now, so there is nothing to see there yet.');
+  } else if (facts.kind !== 'moon' && facts.magnitude > frame.limitingMagnitude) {
+    sentences.push(`Too faint to see through the ${washoutCause(frame.sunAltitude)} right now.`);
+  }
+
+  note.textContent = sentences.join(' ');
+  note.hidden = sentences.length === 0;
+}
+
+/** Writing the same string back costs a layout pass at 60 Hz. */
+function setText(element: HTMLElement, text: string): void {
+  if (element.textContent !== text) element.textContent = text;
 }
 
 /** One list of objects. Shared by the tonight, search and calibration sheets. */
