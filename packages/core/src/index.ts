@@ -29,3 +29,4 @@ export * from './declination.js';
 export * from './orientation.js';
 export * from './projection.js';
 export * from './visibility.js';
+export * from './skyconfidence.js';
