@@ -1,9 +1,10 @@
 /**
  * The sky at one moment, for one observer.
  *
- * This is the slow half of the loop. Recomputing it costs about a millisecond
- * for a thousand stars, and the sky moves a quarter of a degree in that same
- * minute, so it runs on a timer rather than per frame.
+ * This is the slow half of the loop. Recomputing it costs a couple of
+ * milliseconds for the full nine-thousand-star catalogue, and the sky moves a
+ * quarter of a degree in that same minute, so it runs on a timer rather than
+ * per frame.
  */
 
 import {
@@ -11,6 +12,11 @@ import {
   apparentTerms,
   applyApparentPlace,
   applyDiurnalParallax,
+  activeShowers,
+  asteroidPosition,
+  asteroidsValidAt,
+  ASTEROIDS,
+  calendarDayLabel,
   combineAngles,
   countBrighterThan,
   createHorizontalBuffer,
@@ -22,6 +28,7 @@ import {
   limitingMagnitude,
   localSiderealTime,
   magneticDeclination,
+  METEOR_MAGNITUDE,
   moonPosition,
   planetPosition,
   precessCatalog,
@@ -41,7 +48,7 @@ import type { SkyData } from './data.js';
 import type { Position } from './sensors.js';
 import { starLabel } from './data.js';
 
-export type ObjectKind = 'planet' | 'moon' | 'sun' | 'star' | 'deepsky';
+export type ObjectKind = 'planet' | 'asteroid' | 'moon' | 'sun' | 'star' | 'deepsky' | 'shower';
 
 export interface SkyObject {
   name: string;
@@ -64,10 +71,17 @@ export interface SkyObject {
   /** Deep-sky only: the short axis, degrees. Nebulae and galaxies are not
    *  round, and drawing M31 as a circle would be off by a factor of three. */
   angularMinor?: number;
-  /** Deep-sky only: every catalogue number it has, e.g. "M31 · NGC 224". */
+  /** Every catalogue number it has: "M31 · NGC 224" for a Messier object,
+   *  "4 Vesta" for an asteroid. Absent for planets and the Moon. */
   designation?: string;
   /** Deep-sky only: "Galaxy", "Globular cluster", and so on. */
   objectType?: string;
+  /** Meteor shower only: when it peaks, e.g. "12 Aug". */
+  peak?: string;
+  /** Meteor shower only: published zenithal hourly rate at the peak. */
+  hourlyRate?: number;
+  /** Meteor shower only: days to the peak, negative once it has passed. */
+  daysToPeak?: number;
 }
 
 export interface SkyFrame {
@@ -88,6 +102,9 @@ export interface SkyFrame {
    *  variation validity window -- still applied (extrapolating a smooth
    *  field a little past its window beats nothing), but worth saying so. */
   declinationStale: boolean;
+  /** The same, for the asteroids' osculating elements -- see
+   *  asteroidsValidAt. Still drawn, still labelled stale. */
+  asteroidsStale: boolean;
 
   catalog: StarCatalog;
   stars: HorizontalBuffer;
@@ -141,7 +158,7 @@ export class SkyModel {
       when,
     );
 
-    const objects = this.computeObjects(jd, lst, observer, refract);
+    const objects = this.computeObjects(when, jd, lst, observer, refract);
     const sunAltitude = objects.find((object) => object.kind === 'sun')?.altitude ?? -90;
     const moon = objects.find((object) => object.kind === 'moon');
 
@@ -156,6 +173,7 @@ export class SkyModel {
       declination: declination.degrees,
       declinationReliable: declination.reliable,
       declinationStale: declination.stale,
+      asteroidsStale: !asteroidsValidAt(this.data.asteroids, when),
       catalog: this.data.stars,
       stars: buffer,
       starCount,
@@ -175,6 +193,7 @@ export class SkyModel {
   }
 
   private computeObjects(
+    when: Date,
     jd: number,
     lst: number,
     observer: Position,
@@ -261,6 +280,32 @@ export class SkyModel {
       });
     }
 
+    // The bright minor planets, on the same path as the planets proper: the
+    // only difference is which file their elements come from and which
+    // brightness law applies, both of which asteroidPosition handles.
+    for (const name of ASTEROIDS) {
+      const asteroid = asteroidPosition(this.data.asteroids, this.data.planets, name, ttJd);
+      const ofDate = precessFromJ2000(asteroid.ra, asteroid.dec, jd);
+      const apparent = applyApparentPlace(ofDate.ra, ofDate.dec, terms);
+      let horizontal = equatorialToHorizontal(apparent.ra, apparent.dec, lst, observer.latitude);
+      horizontal = applyDiurnalParallax(horizontal, asteroid.distance);
+      if (refract) horizontal = applyRefraction(horizontal);
+
+      objects.push({
+        name,
+        kind: 'asteroid',
+        ra: apparent.ra,
+        dec: apparent.dec,
+        altitude: horizontal.altitude,
+        azimuth: horizontal.azimuth,
+        magnitude: asteroid.magnitude,
+        angularDiameter: 0,
+        distance: asteroid.distance,
+        distanceUnit: 'au',
+        designation: this.data.asteroids.asteroids[name]?.designation ?? name,
+      });
+    }
+
     // Deep-sky objects ride the same path as the planets rather than the star
     // catalogue's bulk transform: there are a few dozen of them, they carry
     // strings, and they need a per-object size. No proper motion and no
@@ -290,8 +335,53 @@ export class SkyModel {
       });
     }
 
+    // Meteor radiants, but only while their shower is running: a marker for
+    // the Perseids in February would be pointing at a patch of Perseus with
+    // nothing coming out of it. Position is the radiant, not an object -- see
+    // showers.ts for why it still carries a magnitude.
+    for (const { shower, daysToPeak } of activeShowers(when)) {
+      const ofDate = precessFromJ2000(shower.ra, shower.dec, jd);
+      const apparent = applyApparentPlace(ofDate.ra, ofDate.dec, terms);
+      let horizontal = equatorialToHorizontal(apparent.ra, apparent.dec, lst, observer.latitude);
+      if (refract) horizontal = applyRefraction(horizontal);
+
+      objects.push({
+        name: shower.name,
+        kind: 'shower',
+        ra: apparent.ra,
+        dec: apparent.dec,
+        altitude: horizontal.altitude,
+        azimuth: horizontal.azimuth,
+        magnitude: METEOR_MAGNITUDE,
+        // A few degrees across: a radiant is a region the tracks point back
+        // to, not a spot, and drawing it as a dot would invite the user to
+        // stare at one place instead of the half of the sky around it.
+        angularDiameter: 6,
+        distance: 0,
+        distanceUnit: 'au',
+        designation: shower.code,
+        objectType: 'Meteor shower',
+        peak: calendarDayLabel(shower.peak),
+        hourlyRate: shower.zhr,
+        daysToPeak,
+      });
+    }
+
     return objects;
   }
+}
+
+/**
+ * The one-line summary of a shower: when it is best and roughly how many.
+ *
+ * "Peaks 12 Aug" rather than a countdown, because the number that matters to
+ * someone standing outside is the date they should come back on.
+ */
+function showerDetail(object: SkyObject): string {
+  const rate = `~${object.hourlyRate}/hr at peak`;
+  const days = object.daysToPeak ?? 0;
+  if (days === 0) return `Meteor shower · peaks tonight · ${rate}`;
+  return `Meteor shower · peaks ${object.peak} · ${rate}`;
 }
 
 export interface TonightEntry {
@@ -332,7 +422,11 @@ export function tonight(frame: SkyFrame, data: SkyData, limit = 30): TonightEntr
           ? `${Math.round((object.illumination ?? 0) * 100)}% lit`
           : object.kind === 'deepsky'
             ? `${object.objectType} · ${object.designation}`
-            : 'Planet',
+            : object.kind === 'asteroid'
+              ? `Asteroid · ${object.designation}`
+              : object.kind === 'shower'
+                ? showerDetail(object)
+                : 'Planet',
       magnitude: object.magnitude,
       altitude: object.altitude,
       azimuth: object.azimuth,
@@ -418,6 +512,34 @@ export function describe(index: number, frame: SkyFrame, data: SkyData): ObjectD
           : RISE_SET_ALTITUDE.star,
     );
 
+    if (object.kind === 'shower') {
+      const days = object.daysToPeak ?? 0;
+      return {
+        title: object.name,
+        subtitle: `Radiant · ${object.designation}`,
+        chips: [
+          'Meteor shower',
+          object.altitude > 0 ? 'Radiant up' : 'Radiant below horizon',
+        ],
+        stats: [
+          ['Peak', object.peak ?? '—'],
+          [
+            'Best',
+            days > 0 ? `in ${days} day${days === 1 ? '' : 's'}` : days === 0 ? 'tonight' : `${-days} days ago`,
+          ],
+          ['Rate at peak', `~${object.hourlyRate}/hr`],
+          ['Altitude', degrees(object.altitude)],
+          ['Azimuth', degrees(object.azimuth)],
+          ['Rises', events.circumpolar ? 'always up' : clock(events.rise)],
+        ],
+        // The two things that most often disappoint someone who went out for
+        // a shower, said before they go rather than after.
+        footer:
+          'Meteors appear anywhere in the sky and only seem to come from here -- ' +
+          'the quoted rate assumes a dark sky with the radiant overhead.',
+      };
+    }
+
     if (object.kind === 'deepsky') {
       const arcmin = (degrees: number): string => `${(degrees * 60).toFixed(0)}'`;
       return {
@@ -451,9 +573,17 @@ export function describe(index: number, frame: SkyFrame, data: SkyData): ObjectD
           ? `${Math.round((object.illumination ?? 0) * 100)}% illuminated`
           : object.kind === 'sun'
             ? 'The Sun'
-            : 'Planet',
+            : object.kind === 'asteroid'
+              ? (object.designation ?? 'Asteroid')
+              : 'Planet',
       chips: [
-        object.kind === 'moon' ? 'Satellite' : object.kind === 'sun' ? 'Star' : 'Planet',
+        object.kind === 'moon'
+          ? 'Satellite'
+          : object.kind === 'sun'
+            ? 'Star'
+            : object.kind === 'asteroid'
+              ? 'Asteroid'
+              : 'Planet',
         object.altitude > 0 ? 'Above horizon' : 'Below horizon',
       ],
       stats: [
@@ -475,7 +605,13 @@ export function describe(index: number, frame: SkyFrame, data: SkyData): ObjectD
       footer:
         object.kind === 'moon'
           ? 'The easiest target for checking the overlay is lined up.'
-          : 'Position computed on this device from orbital elements.',
+          : object.kind === 'asteroid'
+            ? // Said plainly because it is the one place in the app where the
+              // maths degrades with the calendar rather than staying put.
+              frame.asteroidsStale
+              ? 'Orbital elements are past the window they were fitted for -- the position will have drifted.'
+              : 'A two-body orbit fitted to a recent epoch, computed on this device.'
+            : 'Position computed on this device from orbital elements.',
     };
   }
 
@@ -590,7 +726,11 @@ export function search(
               ? 'Sun'
               : object.kind === 'deepsky'
                 ? `${object.objectType} · ${object.designation}`
-                : 'Planet',
+                : object.kind === 'asteroid'
+                  ? `Asteroid · ${object.designation}`
+                  : object.kind === 'shower'
+                    ? showerDetail(object)
+                    : 'Planet',
         ),
         magnitude: object.magnitude,
         altitude: object.altitude,
@@ -709,7 +849,10 @@ export function calibrationTargets(frame: SkyFrame, data: SkyData, limit = 8): T
   return tonight(frame, data, 60)
     .filter(
       (entry) =>
+        // Neither a smudge nor a radiant is a point you can put a crosshair
+        // on, which is the whole job here.
         entry.kind !== 'deepsky' &&
+        entry.kind !== 'shower' &&
         entry.altitude > 12 &&
         entry.altitude < 78 &&
         entry.magnitude < 2,

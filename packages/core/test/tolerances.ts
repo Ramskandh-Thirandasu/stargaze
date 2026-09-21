@@ -32,6 +32,29 @@ export const TOLERANCE_ARCSEC: Record<string, number> = {
 };
 
 /**
+ * The asteroids get a budget that grows away from their solution epoch rather
+ * than one flat number, because that is how their error actually behaves.
+ *
+ * Their elements are a single osculating ellipse with no Jupiter term in it,
+ * so the position is near-exact at the epoch and drifts quadratically either
+ * side of it. Measured against Horizons across the fixture epochs: about 5"
+ * at the epoch, 60" a year and a half out, and a worst case of 806" (Juno)
+ * four years out. This curve clears each of those with roughly a third to a
+ * half in hand.
+ *
+ * Writing it as a curve rather than a constant also survives a rebuild: newer
+ * elements move the epoch, and a flat bound tuned to today's would start
+ * failing on the fixture dates that are then further away from it.
+ *
+ * Worth keeping in perspective -- 806" is 13 arcminutes, and the phone
+ * compass this overlay rides on is out by degrees.
+ */
+export function asteroidToleranceArcsec(daysFromSolutionEpoch: number): number {
+  const years = Math.abs(daysFromSolutionEpoch) / 365.25;
+  return 40 + 70 * years * years;
+}
+
+/**
  * The Moon's abridged series is good to about 10 arcseconds on its own; with
  * nutation and (reduced-precision) aberration applied, measured worst case
  * across the fixture epochs is under 14", so 25" leaves real margin without

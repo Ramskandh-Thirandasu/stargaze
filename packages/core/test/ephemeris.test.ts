@@ -83,19 +83,30 @@ describe('planets', () => {
     });
   }
 
-  it('draws only the planets a phone can actually photograph', () => {
-    expect([...VISIBLE_PLANETS]).toEqual(['Mercury', 'Venus', 'Mars', 'Jupiter', 'Saturn']);
+  it('offers every planet but Earth, and lets the magnitude limit do the filtering', () => {
+    expect([...VISIBLE_PLANETS]).toEqual([
+      'Mercury',
+      'Venus',
+      'Mars',
+      'Jupiter',
+      'Saturn',
+      'Uranus',
+      'Neptune',
+    ]);
+    expect(VISIBLE_PLANETS).not.toContain('Earth');
 
-    // The reason, restated as an assertion: these two are below what a phone
-    // camera can record from the ground, so drawing them would mark empty sky.
+    // The honesty rule, restated as an assertion: the two faint ones are in
+    // the list, but their own magnitudes keep them out of the default view --
+    // the renderer draws nothing fainter than the user's setting, which starts
+    // at 4.5 and reaches the catalogue ceiling of 6.5.
     const jd = julianDate(new Date('2026-01-08T19:45:00Z'));
-    for (const faint of ['Uranus', 'Neptune'] as const) {
-      expect(planetPosition(planetTable, faint, jd).magnitude).toBeGreaterThan(5.5);
-      expect(VISIBLE_PLANETS).not.toContain(faint);
-    }
+    expect(planetPosition(planetTable, 'Uranus', jd).magnitude).toBeGreaterThan(4.5);
+    expect(planetPosition(planetTable, 'Uranus', jd).magnitude).toBeLessThan(6.5);
+    // Neptune has never been a naked-eye object and never clears the ceiling.
+    expect(planetPosition(planetTable, 'Neptune', jd).magnitude).toBeGreaterThan(6.5);
 
-    // And everything shown is comfortably within reach.
-    for (const name of VISIBLE_PLANETS) {
+    // The five everyone has always been able to see are comfortably in reach.
+    for (const name of ['Mercury', 'Venus', 'Mars', 'Jupiter', 'Saturn'] as const) {
       expect(planetPosition(planetTable, name, jd).magnitude).toBeLessThan(5);
     }
   });

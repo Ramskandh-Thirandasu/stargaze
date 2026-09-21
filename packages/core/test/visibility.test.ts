@@ -17,7 +17,7 @@ describe('limiting magnitude', () => {
 
   it('reaches the catalogue ceiling under a fully dark, moonless sky', () => {
     const limit = limitingMagnitude(-30, -10, 0);
-    expect(limit).toBeCloseTo(4.5, 5);
+    expect(limit).toBeCloseTo(6.5, 5);
   });
 
   it('sits in the "brightest planets and first-magnitude stars" band at the end of civil twilight', () => {
@@ -67,7 +67,7 @@ describe('limiting magnitude', () => {
 
   it('never brightens the limit past a full Moon overhead on an otherwise perfect night', () => {
     const worst = limitingMagnitude(-30, 90, 1);
-    // Catalogue ceiling (4.5) minus the maximum modelled Moon penalty (2.5).
-    expect(worst).toBeCloseTo(4.5 - 2.5, 5);
+    // Catalogue ceiling (6.5) minus the maximum modelled Moon penalty (2.5).
+    expect(worst).toBeCloseTo(6.5 - 2.5, 5);
   });
 });

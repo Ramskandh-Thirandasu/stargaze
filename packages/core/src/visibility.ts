@@ -6,8 +6,9 @@
  * brighten it -- the Sun, even below the horizon, and the Moon, when it is up
  * and lit. Both raise the faintest magnitude that is actually observable,
  * which is a different number from the catalogue's own ceiling
- * (packages/web/public/data/stars.json stops at 4.5, a phone's reach under a
- * genuinely dark sky).
+ * (packages/web/public/data/stars.json stops at 6.5, the naked-eye limit under
+ * a genuinely dark sky) and a different number again from the user's own
+ * magnitude setting, which is a preference rather than a measurement.
  *
  * This is deliberately not astronomical-twilight-table precision. The bands
  * below are derived from where each twilight boundary is conventionally
@@ -41,16 +42,21 @@ export function limitingMagnitude(
  *   sun = -12 (nautical end): +4.0  -- squarely in the "magnitude 3-4" band
  *                                      the spec for this asks for.
  *   sun = -18 (astronomical
- *              end) and below: 4.5  -- the catalogue's own ceiling; the sky
- *                                      is dark enough that the phone, not
- *                                      the sky, is the limiting factor.
+ *              end) and below: 6.5  -- the catalogue's own ceiling; the sky
+ *                                      is dark enough that the observer and
+ *                                      the phone, not the sky, are the
+ *                                      limiting factor. A suburban sky never
+ *                                      gets here in practice, which is what
+ *                                      the user's magnitude setting is for --
+ *                                      this function models the sky, not the
+ *                                      light pollution standing on it.
  */
 function twilightLimit(sunAltitude: number): number {
   const BREAKPOINTS: [sun: number, limit: number][] = [
     [0, -4.0],
     [-6, 2.0],
     [-12, 4.0],
-    [-18, 4.5],
+    [-18, 6.5],
   ];
 
   if (sunAltitude >= (BREAKPOINTS[0]?.[0] as number)) return BREAKPOINTS[0]?.[1] as number;

@@ -5,8 +5,8 @@
  * fast it changes:
  *
  *   slow (about 1 Hz)  -- where things are in the sky. The sky turns 15 degrees
- *                         an hour, so recomputing 1,000 stars every frame is
- *                         wasted effort.
+ *                         an hour, so recomputing nine thousand stars every
+ *                         frame is wasted effort.
  *   fast (every frame) -- where the phone is pointed, and the projection.
  *
  * The cull matters more than anything else here: a dot product per object
@@ -24,6 +24,8 @@ import {
   type CameraBasis,
   type Viewport,
 } from '@stargaze/core';
+
+import type { StarCatalog } from '@stargaze/core';
 
 import type { SkyFrame, SkyObject } from './sky.js';
 import type { SkyData } from './data.js';
@@ -61,6 +63,15 @@ const PLANET_COLOR: Record<string, string> = {
   Mars: '#ff8a5c',
   Jupiter: '#ffe0b0',
   Saturn: '#f0d9a8',
+  Uranus: '#a8e4e0',
+  Neptune: '#8fb4f0',
+  // The asteroids share one muted grey: they are rocks, they are points, and
+  // giving each a colour would imply the app knows something about them that
+  // it does not.
+  Vesta: '#cfc6bb',
+  Ceres: '#cfc6bb',
+  Pallas: '#cfc6bb',
+  Juno: '#cfc6bb',
   Sun: '#fff1c4',
   Moon: '#f2e6ce',
 };
@@ -70,6 +81,9 @@ const PLANET_COLOR: Record<string, string> = {
  * stars occupy, so a smudge never reads as a bright star at a glance.
  */
 const DEEP_SKY_COLOR = '154, 214, 196';
+
+/** Radiants get a warm colour of their own: not a star, not a smudge. */
+const SHOWER_COLOR = '240, 176, 108';
 
 /**
  * Keep a centre-aligned label fully on screen.
@@ -93,6 +107,22 @@ export class SkyRenderer {
 
   /** Screen positions of everything drawn this frame, for hit-testing. */
   private readonly hits: { x: number; y: number; index: number; radius: number }[] = [];
+
+  /**
+   * Per-star fill colours, built once per catalogue.
+   *
+   * A star's colour and its alpha both come from numbers that never change --
+   * its B-V index and its magnitude -- so rebuilding the rgba() string every
+   * frame is pure waste. It was cheap enough to ignore at a thousand stars;
+   * measured at nine thousand it is about half the CPU the star loop spends
+   * before a single pixel is drawn. Two variants because the only thing that
+   * does vary is whether the sky has washed the star out.
+   */
+  private colors: { catalog: StarCatalog | null; normal: string[]; washedOut: string[] } = {
+    catalog: null,
+    normal: [],
+    washedOut: [],
+  };
 
   constructor(private readonly canvas: HTMLCanvasElement) {
     const context = canvas.getContext('2d', { alpha: true });
@@ -236,6 +266,29 @@ export class SkyRenderer {
     ctx.restore();
   }
 
+  /** Fill colours for `catalog`, computed on first sight of it. */
+  private starColors(catalog: StarCatalog): { normal: string[]; washedOut: string[] } {
+    if (this.colors.catalog === catalog) return this.colors;
+
+    const normal: string[] = new Array(catalog.count);
+    const washedOut: string[] = new Array(catalog.count);
+
+    for (let i = 0; i < catalog.count; i += 1) {
+      const magnitude = catalog.mag[i] as number;
+      // Brightness spans a factor of 100 over five magnitudes; alpha is
+      // deliberately compressed against that, and floored so the faintest
+      // star is dim rather than invisible.
+      const alpha = Math.max(0.28, Math.min(1, 1.15 - magnitude * 0.14));
+      const { r, g, b } = colorFromBV(catalog.ci[i] as number);
+      const rgb = `${Math.round(r * 255)},${Math.round(g * 255)},${Math.round(b * 255)}`;
+      normal[i] = `rgba(${rgb},${alpha.toFixed(3)})`;
+      washedOut[i] = `rgba(${rgb},${(alpha * 0.3).toFixed(3)})`;
+    }
+
+    this.colors = { catalog, normal, washedOut };
+    return this.colors;
+  }
+
   private drawStars(
     frame: SkyFrame,
     basis: CameraBasis,
@@ -246,6 +299,7 @@ export class SkyRenderer {
     const ctx = this.context;
     const { altitude, azimuth } = frame.stars;
     const { mag, ci } = frame.catalog;
+    const colors = this.starColors(frame.catalog);
 
     // Scale dots with the zoom, so a narrow field looks like a telescope view
     // rather than the same dots further apart.
@@ -269,16 +323,16 @@ export class SkyRenderer {
       // drawn, not silently dropped, just dim -- "there, but you won't see
       // it" rather than a marker over what looks like empty sky.
       const washedOut = magnitude > frame.limitingMagnitude;
-      const alpha =
-        Math.max(0.28, Math.min(1, 1.15 - magnitude * 0.14)) * (washedOut ? 0.3 : 1);
-
-      const { r, g, b } = colorFromBV(ci[i] as number);
-      const color = `rgba(${Math.round(r * 255)},${Math.round(g * 255)},${Math.round(b * 255)},`;
 
       // Bright stars get a halo. It is not decoration: it is what makes a
       // first-magnitude star read as brighter rather than merely bigger. A
-      // washed-out star has already been asked to look unremarkable.
+      // washed-out star has already been asked to look unremarkable. Only a
+      // few dozen stars are this bright, so the gradient and its strings stay
+      // out of the cached path.
       if (magnitude < 2.2 && !washedOut) {
+        const alpha = Math.max(0.28, Math.min(1, 1.15 - magnitude * 0.14));
+        const { r, g, b } = colorFromBV(ci[i] as number);
+        const color = `rgba(${Math.round(r * 255)},${Math.round(g * 255)},${Math.round(b * 255)},`;
         const glow = ctx.createRadialGradient(point.x, point.y, 0, point.x, point.y, radius * 4.5);
         glow.addColorStop(0, `${color}${(alpha * 0.5).toFixed(3)})`);
         glow.addColorStop(1, `${color}0)`);
@@ -288,7 +342,7 @@ export class SkyRenderer {
         ctx.fill();
       }
 
-      ctx.fillStyle = `${color}${alpha.toFixed(3)})`;
+      ctx.fillStyle = (washedOut ? colors.washedOut[i] : colors.normal[i]) as string;
       ctx.beginPath();
       ctx.arc(point.x, point.y, radius, 0, Math.PI * 2);
       ctx.fill();
@@ -313,6 +367,11 @@ export class SkyRenderer {
 
     frame.objects.forEach((object, index) => {
       if (object.altitude < -2) return;
+      // One rule for the whole sky: nothing fainter than the user's setting
+      // gets drawn, stars and planets and smudges alike. The Sun and Moon
+      // clear it by twenty magnitudes, so in practice this is what keeps
+      // Uranus, Neptune and the asteroids out of the default view.
+      if (object.magnitude > options.magnitudeLimit) return;
 
       const direction = directionFromHorizontal(object.altitude, object.azimuth);
       if (!couldBeVisible(direction, basis, cosCone)) return;
@@ -322,6 +381,11 @@ export class SkyRenderer {
 
       if (object.kind === 'deepsky') {
         this.drawDeepSky(object, point, viewport, index, frame.limitingMagnitude, options);
+        return;
+      }
+
+      if (object.kind === 'shower') {
+        this.drawRadiant(object, point, viewport, index, frame.limitingMagnitude, options);
         return;
       }
 
@@ -400,11 +464,6 @@ export class SkyRenderer {
     limitingMagnitude: number,
     options: RenderOptions,
   ): void {
-    // Most of the Messier list needs binoculars. Gating on the same setting
-    // the stars use keeps one rule in the app: nothing is drawn that the user
-    // has said they cannot see.
-    if (object.magnitude > options.magnitudeLimit) return;
-
     const ctx = this.context;
     const pixelsPerDegree = focalLength(viewport) * (Math.PI / 180);
 
@@ -441,6 +500,67 @@ export class SkyRenderer {
     }
 
     this.hits.push({ x: point.x, y: point.y, index: -1 - index, radius: Math.max(rx, 10) });
+  }
+
+  /**
+   * A meteor radiant: a ring with spokes running outward from it.
+   *
+   * Drawn deliberately unlike everything else in the app, because it is the
+   * one marker that is not an object. There is nothing at a radiant to look
+   * at -- the meteors appear all over the sky and only trace back to here --
+   * so the spokes point outward to say "watch around this", and the ring is
+   * open rather than filled to avoid promising anything inside it.
+   */
+  private drawRadiant(
+    object: SkyObject,
+    point: { x: number; y: number },
+    viewport: Viewport,
+    index: number,
+    limitingMagnitude: number,
+    options: RenderOptions,
+  ): void {
+    const ctx = this.context;
+    const radius = Math.max(
+      14,
+      (object.angularDiameter / 2) * focalLength(viewport) * (Math.PI / 180),
+    );
+
+    // Same rule as the stars: a sky bright enough to hide second-magnitude
+    // meteors is a sky where this shower is not happening for the observer,
+    // whatever the calendar says.
+    const washedOut = object.magnitude > limitingMagnitude;
+    ctx.globalAlpha = washedOut ? 0.3 : 0.85;
+
+    ctx.strokeStyle = `rgba(${SHOWER_COLOR},1)`;
+    ctx.lineWidth = 1.1;
+    ctx.beginPath();
+    ctx.arc(point.x, point.y, radius, 0, Math.PI * 2);
+    ctx.stroke();
+
+    for (let spoke = 0; spoke < 8; spoke += 1) {
+      const angle = (spoke * Math.PI) / 4;
+      const dx = Math.cos(angle);
+      const dy = Math.sin(angle);
+      ctx.beginPath();
+      ctx.moveTo(point.x + dx * radius * 1.25, point.y + dy * radius * 1.25);
+      ctx.lineTo(point.x + dx * radius * 1.9, point.y + dy * radius * 1.9);
+      ctx.stroke();
+    }
+
+    // Labelled with the rate, because "Perseids" alone does not tell anyone
+    // whether it is worth staying out. Suppressed when washed out, same as
+    // the deep-sky labels: no confident name over sky that is not delivering.
+    if (options.showLabels && !washedOut) {
+      ctx.fillStyle = `rgba(${SHOWER_COLOR},0.85)`;
+      const label = `${object.name} ~${object.hourlyRate}/hr`;
+      ctx.fillText(
+        label,
+        clampLabelX(ctx, label, point.x, this.width),
+        point.y - radius * 1.9 - 8,
+      );
+    }
+
+    this.hits.push({ x: point.x, y: point.y, index: -1 - index, radius });
   }
 
   /** Darken the unlit part of the Moon's disc. */

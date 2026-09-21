@@ -3,7 +3,7 @@
  *
  * Typed parallel arrays rather than an array of objects: the whole catalogue
  * has to be transformed every time the sky is recomputed, and this keeps it in
- * a handful of contiguous buffers instead of a thousand-odd scattered objects
+ * a handful of contiguous buffers instead of nine thousand scattered objects
  * for the garbage collector to trip over.
  */
 

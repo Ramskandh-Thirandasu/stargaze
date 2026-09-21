@@ -10,6 +10,7 @@ from __future__ import annotations
 import sys
 import time
 
+import build_asteroids
 import build_constellations
 import build_declination
 import build_deepsky
@@ -22,6 +23,7 @@ STEPS = [
     ("constellations", build_constellations.main),
     ("deepsky", build_deepsky.main),
     ("planets", build_planets.main),
+    ("asteroids", build_asteroids.main),
     ("declination", build_declination.main),
 ]
 

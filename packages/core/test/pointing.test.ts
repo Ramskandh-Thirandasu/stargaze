@@ -504,10 +504,10 @@ describe('star catalogue', () => {
   const catalog = parseStarCatalog(starsJson);
 
   it('loads the generated catalogue', () => {
-    // Trimmed to what a phone can photograph: around a thousand stars, not the
-    // 2,850 a dark-adapted eye would reach.
-    expect(catalog.count).toBeGreaterThan(800);
-    expect(catalog.count).toBeLessThan(1400);
+    // Everything down to the naked-eye limit under a dark sky -- around nine
+    // thousand stars, not the thousand a light-polluted one shows.
+    expect(catalog.count).toBeGreaterThan(8000);
+    expect(catalog.count).toBeLessThan(11000);
     expect(catalog.ra.length).toBe(catalog.count);
     expect(catalog.indexOfHip.size).toBe(catalog.count);
   });
@@ -525,7 +525,7 @@ describe('star catalogue', () => {
   });
 
   it('finds the cutoff index by binary search', () => {
-    for (const limit of [1.5, 3, 4, 4.5]) {
+    for (const limit of [1.5, 3, 4, 4.5, 5.5, 6.5]) {
       const count = countBrighterThan(catalog, limit);
       expect(catalog.mag[count - 1] as number).toBeLessThanOrEqual(limit);
       if (count < catalog.count) {
