@@ -87,6 +87,20 @@ const DEEP_SKY_COLOR = '154, 214, 196';
 const SHOWER_COLOR = '240, 176, 108';
 
 /**
+ * Below this radius a star is drawn as a square rather than a circle.
+ *
+ * 1.2px, because at that size the two are the same handful of antialiased
+ * pixels and fillRect gets there in one call instead of four. Raise it and
+ * bright stars start to look blocky; lower it and the saving disappears,
+ * since the faint end of the catalogue is where nearly all the stars are.
+ *
+ * ponytail: chosen by eye against the pixel grid, not profiled on a phone --
+ * if the star field still stutters on real hardware the next thing to try is
+ * batching a whole magnitude band into one path per colour.
+ */
+const SQUARE_DOT_RADIUS = 1.2;
+
+/**
  * Keep a centre-aligned label fully on screen.
  *
  * Labels are drawn centred on the object, so one near an edge gets its name
@@ -106,8 +120,20 @@ export class SkyRenderer {
   private height = 0;
   private pixelRatio = 1;
 
-  /** Screen positions of everything drawn this frame, for hit-testing. */
-  private readonly hits: { x: number; y: number; index: number; radius: number }[] = [];
+  /* Screen positions of everything drawn this frame, for hit-testing.
+   *
+   * Four parallel arrays rather than an array of objects.
+   *
+   * This is rebuilt every frame but only read when a finger lands, so at
+   * magnitude 6.5 the object-per-star version was allocating a few thousand
+   * short-lived objects sixty times a second purely so that a tap an hour
+   * later could be answered. The arrays keep their capacity between frames,
+   * so after the first few there is no allocation here at all. */
+  private readonly hitX: number[] = [];
+  private readonly hitY: number[] = [];
+  private readonly hitIndex: number[] = [];
+  private readonly hitRadius: number[] = [];
+  private hitCount = 0;
 
   /** Named objects waiting to be laid out -- see drawObjects. */
   private readonly pendingLabels: {
@@ -167,7 +193,7 @@ export class SkyRenderer {
     options: RenderOptions,
   ): void {
     const ctx = this.context;
-    this.hits.length = 0;
+    this.hitCount = 0;
 
     ctx.setTransform(this.pixelRatio, 0, 0, this.pixelRatio, 0, 0);
     ctx.clearRect(0, 0, this.width, this.height);
@@ -353,11 +379,22 @@ export class SkyRenderer {
       }
 
       ctx.fillStyle = (washedOut ? colors.washedOut[i] : colors.normal[i]) as string;
-      ctx.beginPath();
-      ctx.arc(point.x, point.y, radius, 0, Math.PI * 2);
-      ctx.fill();
+      if (radius <= SQUARE_DOT_RADIUS) {
+        // A circle this small is a square by the time it has been antialiased,
+        // and fillRect skips building and tessellating a path to say so. Most
+        // of the catalogue is down here -- at magnitude 6.5 the faint end is
+        // the overwhelming majority of what gets drawn, so this is the
+        // difference between one draw call and four, a few thousand times a
+        // frame.
+        const size = radius * 2;
+        ctx.fillRect(point.x - radius, point.y - radius, size, size);
+      } else {
+        ctx.beginPath();
+        ctx.arc(point.x, point.y, radius, 0, Math.PI * 2);
+        ctx.fill();
+      }
 
-      this.hits.push({ x: point.x, y: point.y, index: i, radius });
+      this.addHit(point.x, point.y, i, radius);
     }
   }
 
@@ -441,12 +478,8 @@ export class SkyRenderer {
         this.queueLabel(object.name, point.x, point.y - radius - 8, 'rgba(236, 229, 215, 0.82)');
       }
 
-      this.hits.push({
-        x: point.x,
-        y: point.y,
-        index: -1 - index, // negative indices mean "an object, not a star"
-        radius: Math.max(radius, 10),
-      });
+      // negative indices mean "an object, not a star"
+      this.addHit(point.x, point.y, -1 - index, Math.max(radius, 10));
     });
 
     this.flushLabels();
@@ -550,7 +583,7 @@ export class SkyRenderer {
       this.queueLabel(object.name, point.x, point.y - ry - 8, `rgba(${DEEP_SKY_COLOR},0.82)`);
     }
 
-    this.hits.push({ x: point.x, y: point.y, index: -1 - index, radius: Math.max(rx, 10) });
+    this.addHit(point.x, point.y, -1 - index, Math.max(rx, 10));
   }
 
   /**
@@ -610,7 +643,7 @@ export class SkyRenderer {
       );
     }
 
-    this.hits.push({ x: point.x, y: point.y, index: -1 - index, radius });
+    this.addHit(point.x, point.y, -1 - index, radius);
   }
 
   /** Darken the unlit part of the Moon's disc. */
@@ -749,17 +782,28 @@ export class SkyRenderer {
     let best: number | null = null;
     let bestDistance = tolerance;
 
-    for (const hit of this.hits) {
-      const distance = Math.hypot(hit.x - x, hit.y - y);
+    for (let i = 0; i < this.hitCount; i += 1) {
+      const distance = Math.hypot((this.hitX[i] as number) - x, (this.hitY[i] as number) - y);
       // Bias toward whatever is drawn larger when two are equally close: that
       // is the one the user could actually see to aim at.
-      const effective = distance - hit.radius * 0.5;
+      const effective = distance - (this.hitRadius[i] as number) * 0.5;
       if (effective < bestDistance) {
         bestDistance = effective;
-        best = hit.index;
+        best = this.hitIndex[i] as number;
       }
     }
 
     return best;
+  }
+
+  /** Record a tap target. Written by index so the arrays keep their capacity
+   *  and the per-frame rebuild costs no allocation -- see the hit arrays. */
+  private addHit(x: number, y: number, index: number, radius: number): void {
+    const n = this.hitCount;
+    this.hitX[n] = x;
+    this.hitY[n] = y;
+    this.hitIndex[n] = index;
+    this.hitRadius[n] = radius;
+    this.hitCount = n + 1;
   }
 }
