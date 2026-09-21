@@ -93,6 +93,17 @@ npm run ios:open
 
 Needs a Mac and Xcode. You have to set a signing team on the App target yourself, and you want a real device rather than the Simulator, which has no camera or magnetometer and so only ever shows the drag fallback. Full notes, including the app icon that still needs replacing, are in [docs/ios-build.md](docs/ios-build.md).
 
+### Deploying
+
+GitHub is where the code lives. Two things happen on every push to `main`:
+
+- `.github/workflows/pages.yml` builds and publishes to GitHub Pages.
+- `.github/workflows/sync.yml` force-pushes every branch and tag to the GitLab mirror at [gitlab.com/Ramskandh-Thirandasu/star-gaze](https://gitlab.com/Ramskandh-Thirandasu/star-gaze), which runs `.gitlab-ci.yml` and publishes GitLab Pages from the same commit.
+
+The sync is one-way. Anything committed directly in GitLab gets overwritten by the next push from GitHub, `.gitlab-ci.yml` included, so edit that file here rather than in GitLab's web IDE.
+
+Both hosts serve the same bundle unmodified. The Vite `base` is `./` and the manifest and service worker use relative paths throughout, so the app doesn't care whether it's served from `/stargaze/` or `/star-gaze/`.
+
 ### Rebuilding the star data
 
 `npm run data` runs the Python scripts in `tools/` to regenerate the JSON in `packages/web/public/data/`. You only need it to change the magnitude limit or pull newer source data. The generated files are committed, so a normal build never touches Python.
