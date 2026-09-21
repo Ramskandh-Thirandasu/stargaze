@@ -973,6 +973,18 @@ class StarGaze {
    * app. Which is also why the override below is on the warning itself,
    * rather than buried in settings where nobody would find it.
    */
+  /**
+   * True when the heading itself is suspect, so anything derived from it --
+   * every bearing, every turn instruction, the whole sky alignment -- is
+   * wrong by the same unknown amount. Distinct from the sky-confidence
+   * warning, which is about what is in front of the lens rather than which
+   * way the phone thinks it is facing, though indoors they usually fire
+   * together.
+   */
+  private headingIsDoubtful(): boolean {
+    return this.magneticInterference || (this.sky.warn && !this.skyOverride);
+  }
+
   private updateSkyConfidence(): void {
     if (this.permissions.camera === 'granted' && this.shell.video.srcObject) {
       this.skySampler.update(this.shell.video, performance.now());
@@ -1125,7 +1137,14 @@ class StarGaze {
 
       this.renderer.draw(this.frame, this.data, basis, this.viewport, options);
       this.shell.updateHud(basis, this.frame, this.mode, this.magneticInterference);
-      this.shell.updateTracking(this.frame, basis, this.viewport);
+      // Manual mode takes its heading from the drag, not the magnetometer,
+      // so none of this doubt applies there.
+      this.shell.updateTracking(
+        this.frame,
+        basis,
+        this.viewport,
+        this.mode === 'sensors' && this.headingIsDoubtful(),
+      );
     }
 
     requestAnimationFrame(() => this.tick());

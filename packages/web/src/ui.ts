@@ -115,8 +115,16 @@ export interface Shell {
   updateHud(basis: CameraBasis, frame: SkyFrame, mode: string, magneticInterference: boolean): void;
   /** Start guiding the user onto this object. Null stops. */
   track(target: TrackTarget | null): void;
-  /** Refresh the guidance for wherever the phone is pointed now. */
-  updateTracking(frame: SkyFrame, basis: CameraBasis, viewport: Viewport): void;
+  /** Refresh the guidance for wherever the phone is pointed now.
+   *  headingDoubt says the compass is not to be trusted, which makes every
+   *  turn instruction below wrong by the same unknown amount -- see
+   *  updateSkyConfidence in main.ts. */
+  updateTracking(
+    frame: SkyFrame,
+    basis: CameraBasis,
+    viewport: Viewport,
+    headingDoubt?: boolean,
+  ): void;
   openCard(detail: ObjectDetail): void;
   closeCard(): void;
   openSettings(): void;
@@ -658,7 +666,7 @@ export function buildShell(root: HTMLElement): Shell {
       }
     },
 
-    updateTracking(frame, basis, viewport) {
+    updateTracking(frame, basis, viewport, headingDoubt = false) {
       if (!tracked) return;
 
       const position = frame.positionOf(tracked.index);
@@ -678,11 +686,24 @@ export function buildShell(root: HTMLElement): Shell {
       // fills, and the border thickens.
       trackbar.dataset.near = String(!guidance.locked && guidance.separation < 20);
 
-      setText(trackState, instruction(guidance, position.altitude));
+      // A turn instruction is only ever as good as the heading it was
+      // measured from. Saying "turn right 47 degrees" off a compass that is
+      // pulled off true is worse than saying nothing, because it sounds
+      // exact -- so the doubt is stated in the same sentence, not left to a
+      // warning elsewhere on screen that the eye is not on.
+      trackbar.dataset.doubt = String(headingDoubt);
+      setText(
+        trackState,
+        headingDoubt
+          ? `Compass unreliable here, so this bearing may be well off: ${instruction(guidance, position.altitude).toLowerCase()}`
+          : instruction(guidance, position.altitude),
+      );
       setText(trackAlt, `${position.altitude.toFixed(1)}°`);
       setText(trackAz, `${position.azimuth.toFixed(1)}°`);
 
-      const status = coarseStatus(guidance, position.altitude);
+      const status = headingDoubt
+        ? `${coarseStatus(guidance, position.altitude)}, compass unreliable`
+        : coarseStatus(guidance, position.altitude);
       if (status !== lastStatus) {
         lastStatus = status;
         trackStatus.textContent = `${tracked.label}: ${status}`;

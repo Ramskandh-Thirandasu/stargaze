@@ -338,6 +338,19 @@ body:has(.card[data-open='true']) .trackbar[data-open='true'] {
   background: rgba(30, 14, 9, 0.9);
 }
 
+/* A bearing off an untrustworthy compass. Dashed rather than tinted, so it
+   reads the same way the behind-you arrow does and survives being looked at
+   by someone who cannot tell the two ambers apart. The wording carries the
+   actual meaning; this is only what catches the eye. */
+.trackbar[data-doubt='true'] {
+  border-style: dashed;
+  border-color: rgba(226, 103, 60, 0.55);
+}
+
+.trackbar[data-doubt='true'][data-locked='true'] {
+  background: rgba(30, 14, 9, 0.72);
+}
+
 .track-head {
   display: flex;
   align-items: center;
