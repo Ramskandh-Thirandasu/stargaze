@@ -503,7 +503,11 @@ class StarGaze {
   private showCard(): void {
     if (!this.frame || this.selected === null) return;
     const detail = describe(this.selected, this.frame, this.data);
-    if (detail) this.shell.openCard(detail);
+    if (!detail) return;
+    this.shell.openCard(detail);
+    // Selecting something is also asking to be pointed at it. The card names
+    // the object; the shell does the rest from the index and the sky frame.
+    this.shell.track({ index: this.selected, label: detail.title });
   }
 
   /* ---------------------------------------------------------------- *
@@ -530,6 +534,11 @@ class StarGaze {
     this.wireCalibration();
     this.shell.modeButton.addEventListener('click', () => void this.toggleMode());
     this.shell.cardClose.addEventListener('click', () => {
+      this.selected = null;
+      this.shell.closeCard();
+    });
+    // Same state, same handler: closeCard clears the guidance too.
+    this.shell.stopTrackingButton.addEventListener('click', () => {
       this.selected = null;
       this.shell.closeCard();
     });
@@ -1116,6 +1125,7 @@ class StarGaze {
 
       this.renderer.draw(this.frame, this.data, basis, this.viewport, options);
       this.shell.updateHud(basis, this.frame, this.mode, this.magneticInterference);
+      this.shell.updateTracking(this.frame, basis, this.viewport);
     }
 
     requestAnimationFrame(() => this.tick());
