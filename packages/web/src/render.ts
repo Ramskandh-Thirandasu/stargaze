@@ -25,6 +25,8 @@ import {
   type Viewport,
 } from '@stargaze/core';
 
+import type { StarCatalog } from '@stargaze/core';
+
 import type { SkyFrame, SkyObject } from './sky.js';
 import type { SkyData } from './data.js';
 
@@ -105,6 +107,22 @@ export class SkyRenderer {
 
   /** Screen positions of everything drawn this frame, for hit-testing. */
   private readonly hits: { x: number; y: number; index: number; radius: number }[] = [];
+
+  /**
+   * Per-star fill colours, built once per catalogue.
+   *
+   * A star's colour and its alpha both come from numbers that never change --
+   * its B-V index and its magnitude -- so rebuilding the rgba() string every
+   * frame is pure waste. It was cheap enough to ignore at a thousand stars;
+   * measured at nine thousand it is about half the CPU the star loop spends
+   * before a single pixel is drawn. Two variants because the only thing that
+   * does vary is whether the sky has washed the star out.
+   */
+  private colors: { catalog: StarCatalog | null; normal: string[]; washedOut: string[] } = {
+    catalog: null,
+    normal: [],
+    washedOut: [],
+  };
 
   constructor(private readonly canvas: HTMLCanvasElement) {
     const context = canvas.getContext('2d', { alpha: true });
@@ -248,6 +266,29 @@ export class SkyRenderer {
     ctx.restore();
   }
 
+  /** Fill colours for `catalog`, computed on first sight of it. */
+  private starColors(catalog: StarCatalog): { normal: string[]; washedOut: string[] } {
+    if (this.colors.catalog === catalog) return this.colors;
+
+    const normal: string[] = new Array(catalog.count);
+    const washedOut: string[] = new Array(catalog.count);
+
+    for (let i = 0; i < catalog.count; i += 1) {
+      const magnitude = catalog.mag[i] as number;
+      // Brightness spans a factor of 100 over five magnitudes; alpha is
+      // deliberately compressed against that, and floored so the faintest
+      // star is dim rather than invisible.
+      const alpha = Math.max(0.28, Math.min(1, 1.15 - magnitude * 0.14));
+      const { r, g, b } = colorFromBV(catalog.ci[i] as number);
+      const rgb = `${Math.round(r * 255)},${Math.round(g * 255)},${Math.round(b * 255)}`;
+      normal[i] = `rgba(${rgb},${alpha.toFixed(3)})`;
+      washedOut[i] = `rgba(${rgb},${(alpha * 0.3).toFixed(3)})`;
+    }
+
+    this.colors = { catalog, normal, washedOut };
+    return this.colors;
+  }
+
   private drawStars(
     frame: SkyFrame,
     basis: CameraBasis,
@@ -258,6 +299,7 @@ export class SkyRenderer {
     const ctx = this.context;
     const { altitude, azimuth } = frame.stars;
     const { mag, ci } = frame.catalog;
+    const colors = this.starColors(frame.catalog);
 
     // Scale dots with the zoom, so a narrow field looks like a telescope view
     // rather than the same dots further apart.
@@ -281,16 +323,16 @@ export class SkyRenderer {
       // drawn, not silently dropped, just dim -- "there, but you won't see
       // it" rather than a marker over what looks like empty sky.
       const washedOut = magnitude > frame.limitingMagnitude;
-      const alpha =
-        Math.max(0.28, Math.min(1, 1.15 - magnitude * 0.14)) * (washedOut ? 0.3 : 1);
-
-      const { r, g, b } = colorFromBV(ci[i] as number);
-      const color = `rgba(${Math.round(r * 255)},${Math.round(g * 255)},${Math.round(b * 255)},`;
 
       // Bright stars get a halo. It is not decoration: it is what makes a
       // first-magnitude star read as brighter rather than merely bigger. A
-      // washed-out star has already been asked to look unremarkable.
+      // washed-out star has already been asked to look unremarkable. Only a
+      // few dozen stars are this bright, so the gradient and its strings stay
+      // out of the cached path.
       if (magnitude < 2.2 && !washedOut) {
+        const alpha = Math.max(0.28, Math.min(1, 1.15 - magnitude * 0.14));
+        const { r, g, b } = colorFromBV(ci[i] as number);
+        const color = `rgba(${Math.round(r * 255)},${Math.round(g * 255)},${Math.round(b * 255)},`;
         const glow = ctx.createRadialGradient(point.x, point.y, 0, point.x, point.y, radius * 4.5);
         glow.addColorStop(0, `${color}${(alpha * 0.5).toFixed(3)})`);
         glow.addColorStop(1, `${color}0)`);
@@ -300,7 +342,7 @@ export class SkyRenderer {
         ctx.fill();
       }
 
-      ctx.fillStyle = `${color}${alpha.toFixed(3)})`;
+      ctx.fillStyle = (washedOut ? colors.washedOut[i] : colors.normal[i]) as string;
       ctx.beginPath();
       ctx.arc(point.x, point.y, radius, 0, Math.PI * 2);
       ctx.fill();

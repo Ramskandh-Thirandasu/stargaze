@@ -1,8 +1,9 @@
 /**
  * Re-verifies the ephemeris against a FRESH JPL Horizons epoch -- "now", not
- * the committed fixture dates. Passing against four (now six) fixed dates
- * forever does not prove the model still holds years from now; this is what
- * actually checks that, on a live instant nobody hand-picked.
+ * the committed fixture dates. Passing against six fixed dates forever does
+ * not prove the model still holds years from now; this is what actually
+ * checks that, on a live instant nobody hand-picked. The asteroids need it
+ * most: their elements are one osculating solution and they age.
  *
  * Skipped by default, so `npm test` stays offline and fast. Runs only when
  * LIVE_VERIFY is set, which the monthly scheduled workflow does -- see
@@ -16,8 +17,9 @@ import { angularSeparation } from '../src/angles.js';
 import { julianDate, terrestrialJulianDate } from '../src/time.js';
 import { moonPosition } from '../src/moon.js';
 import { ALL_PLANETS, planetPosition, sunPosition, type PlanetName } from '../src/planets.js';
-import { planetTable } from './fixtures.js';
-import { TOLERANCE_ARCSEC, MOON_TOLERANCE_ARCSEC } from './tolerances.js';
+import { ASTEROIDS, asteroidPosition } from '../src/asteroids.js';
+import { asteroidTable, planetTable } from './fixtures.js';
+import { asteroidToleranceArcsec, TOLERANCE_ARCSEC, MOON_TOLERANCE_ARCSEC } from './tolerances.js';
 
 const API = 'https://ssd.jpl.nasa.gov/api/horizons.api';
 
@@ -32,6 +34,14 @@ const BODIES: Record<string, string> = {
   Neptune: '899',
 };
 const MOON = '301';
+
+/** Horizons small-body record numbers; the semicolon is what makes them so. */
+const ASTEROID_COMMANDS: Record<string, string> = {
+  Ceres: '1;',
+  Pallas: '2;',
+  Juno: '3;',
+  Vesta: '4;',
+};
 
 function isNumber(cell: string): boolean {
   return cell.trim() !== '' && Number.isFinite(Number(cell));
@@ -126,6 +136,24 @@ describe.skipIf(!process.env.LIVE_VERIFY)('live ephemeris re-verification', () =
         error,
         `${name} at ${start}: off by ${(error * 3600).toFixed(1)}", budget ${TOLERANCE_ARCSEC[name]}"`,
       ).toBeLessThan((TOLERANCE_ARCSEC[name] as number) / 3600);
+    });
+  }
+
+  // The check this file exists for, more than any other. The planets ride a
+  // fit that stays honest to 2050; the asteroids ride one osculating solution
+  // that goes quietly wrong as the calendar moves away from it, and nothing
+  // in the committed fixtures can notice that happening.
+  for (const name of ASTEROIDS) {
+    it(`matches ${name} at the current instant`, async () => {
+      const reference = await fetchGeocentric(ASTEROID_COMMANDS[name] as string, start, stop);
+      const computed = asteroidPosition(asteroidTable, planetTable, name, ttJd);
+      const error = angularSeparation(computed.ra, computed.dec, reference.ra, reference.dec);
+      const budget = asteroidToleranceArcsec(ttJd - asteroidTable.solutionEpoch);
+      expect(
+        error,
+        `${name} at ${start}: off by ${(error * 3600).toFixed(1)}", budget ${budget.toFixed(0)}"` +
+          ' -- if this fails, rebuild with `python tools/build_asteroids.py`',
+      ).toBeLessThan(budget / 3600);
     });
   }
 
