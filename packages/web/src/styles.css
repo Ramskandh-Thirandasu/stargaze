@@ -1166,3 +1166,40 @@ input[type='range']::-moz-range-thumb {
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5), 0 0 0 6px rgba(226, 103, 60, 0.18);
   }
 }
+
+/* The sky-check readout.
+
+   A plain two-column list rather than anything graphical: the point is to be
+   able to read a number off it while standing outside, compare it against the
+   same number taken indoors, and pick a threshold between the two. */
+.diag {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px 16px;
+  margin-top: 12px;
+  padding: 12px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.diag > div {
+  display: contents;
+}
+
+.diag span {
+  font-size: 13px;
+  color: var(--dim);
+}
+
+.diag b {
+  font-size: 13px;
+  font-weight: 500;
+  text-align: right;
+  color: var(--ink);
+}
+
+/* Only the verdict changes colour, and the word already says it. */
+.diag[data-warn='true'] #diag-verdict {
+  color: var(--accent);
+}

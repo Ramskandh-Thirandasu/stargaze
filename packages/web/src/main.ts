@@ -530,7 +530,12 @@ class StarGaze {
       );
     });
 
-    this.shell.settingsButton.addEventListener('click', () => this.shell.openSettings());
+    this.shell.settingsButton.addEventListener('click', () => {
+      this.shell.openSettings();
+      // Seed it immediately rather than making them wait for the next sky
+      // update, which is a second away and reads as the panel being broken.
+      this.publishDiagnostics();
+    });
     this.wireCalibration();
     this.shell.modeButton.addEventListener('click', () => void this.toggleMode());
     this.shell.cardClose.addEventListener('click', () => {
@@ -981,6 +986,19 @@ class StarGaze {
    * way the phone thinks it is facing, though indoors they usually fire
    * together.
    */
+  /** Push the live sky-check numbers at the settings panel. Cheap, and only
+   *  worth doing while that panel is actually on screen. */
+  private publishDiagnostics(): void {
+    this.shell.showDiagnostics({
+      confidence: this.sky.confidence,
+      warn: this.sky.warn,
+      reason: this.sky.reason,
+      frame: this.skySampler.statistics,
+      gpsAccuracyMetres: this.observer.accuracy,
+      magneticConfidence: this.magneticConfidence,
+    });
+  }
+
   private headingIsDoubtful(): boolean {
     return this.magneticInterference || (this.sky.warn && !this.skyOverride);
   }
@@ -1001,6 +1019,8 @@ class StarGaze {
 
     if (!this.sky.warn) this.skyOverride = false;
     const doubt = this.sky.warn && !this.skyOverride;
+
+    this.publishDiagnostics();
 
     // Dimmed in proportion to the doubt, and never past the point of being
     // readable: the objects are still there, still tappable, still named.

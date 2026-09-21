@@ -17,8 +17,10 @@ import {
   normalize360,
   RISE_SET_ALTITUDE,
   scrubRate,
+  structureRatio,
   washoutCause,
   type CameraBasis,
+  type FrameStatistics,
   type Guidance,
   type Viewport,
 } from '@stargaze/core';
@@ -63,6 +65,16 @@ export interface TimeHandlers {
   onPick(when: Date): void;
   /** Back to the present. */
   onNow(): void;
+}
+
+export interface Diagnostics {
+  confidence: number;
+  warn: boolean;
+  reason: string | null;
+  /** Null while the camera is off or has produced no frame yet. */
+  frame: FrameStatistics | null;
+  gpsAccuracyMetres: number | null;
+  magneticConfidence: number;
 }
 
 export interface TrackTarget {
@@ -125,6 +137,9 @@ export interface Shell {
     viewport: Viewport,
     headingDoubt?: boolean,
   ): void;
+  /** Live numbers behind the sky check, for tuning it against real hardware.
+   *  Only worth calling while the settings sheet is open. */
+  showDiagnostics(d: Diagnostics): void;
   openCard(detail: ObjectDetail): void;
   closeCard(): void;
   openSettings(): void;
@@ -394,6 +409,29 @@ export function buildShell(root: HTMLElement): Shell {
           </div>
         </div>
 
+        <!-- The sky check is the one part of this app tuned against guesses
+             rather than measurements: nothing here has ever seen a real
+             camera frame. Showing the live numbers is what lets someone
+             standing outside find out what the thresholds should be. -->
+        <div style="margin-top:24px;padding-top:20px;border-top:1px solid rgba(255,255,255,0.08)">
+          <span class="cap">Sky check</span>
+          <p class="help" style="line-height:1.5;margin:8px 0 0">
+            What the app is using to decide whether it is looking at open sky.
+            Needs the camera on. Point it at the sky, then at a ceiling, and
+            watch which numbers move.
+          </p>
+          <div class="diag" id="diag">
+            <div><span>Verdict</span><b class="mono" id="diag-verdict">--</b></div>
+            <div><span>Confidence</span><b class="mono" id="diag-confidence">--</b></div>
+            <div><span>Mean luminance</span><b class="mono" id="diag-mean">--</b></div>
+            <div><span>Structure</span><b class="mono" id="diag-structure">--</b></div>
+            <div><span>Point sources</span><b class="mono" id="diag-points">--</b></div>
+            <div><span>Saturated</span><b class="mono" id="diag-saturated">--</b></div>
+            <div><span>GPS accuracy</span><b class="mono" id="diag-gps">--</b></div>
+            <div><span>Compass trust</span><b class="mono" id="diag-magnetic">--</b></div>
+          </div>
+        </div>
+
         <div style="margin-top:24px;padding-top:20px;border-top:1px solid rgba(255,255,255,0.08)">
           <span class="cap">Credits</span>
           <p class="help" style="line-height:1.6;margin-top:10px">
@@ -428,6 +466,16 @@ export function buildShell(root: HTMLElement): Shell {
   // Held rather than looked up: unlike the rest of the chrome, these are
   // written on every frame the guidance is running.
   const tracker = pick('tracker');
+
+  const diag = pick('diag');
+  const diagVerdict = pick('diag-verdict');
+  const diagConfidence = pick('diag-confidence');
+  const diagMean = pick('diag-mean');
+  const diagStructure = pick('diag-structure');
+  const diagPoints = pick('diag-points');
+  const diagSaturated = pick('diag-saturated');
+  const diagGps = pick('diag-gps');
+  const diagMagnetic = pick('diag-magnetic');
   const trackArrow = pick('track-arrow');
   const trackArrowGlyph = pick('track-arrow-glyph');
   const trackArrowGap = pick('track-arrow-gap');
@@ -732,6 +780,33 @@ export function buildShell(root: HTMLElement): Shell {
         refreshTrackEvents(trackEventCap, trackEvent, frame, facts, position.altitude);
         refreshCardNote(cardNote, frame, facts, position.altitude);
       }
+    },
+
+    showDiagnostics(d) {
+      const pct = (v: number): string => `${Math.round(v * 100)}%`;
+      setText(diagVerdict, d.warn ? (d.reason ?? 'doubtful') : 'looks like sky');
+      diag.dataset.warn = String(d.warn);
+      setText(diagConfidence, pct(d.confidence));
+
+      if (d.frame) {
+        // Three decimals on the ones that decide it: the dark-room and
+        // dark-sky cases differ in the third place, which is exactly the
+        // comparison this readout exists to let someone make.
+        setText(diagMean, d.frame.meanLuminance.toFixed(3));
+        setText(diagStructure, structureRatio(d.frame).toFixed(3));
+        setText(diagPoints, String(d.frame.pointSources));
+        setText(diagSaturated, pct(d.frame.saturatedFraction));
+      } else {
+        for (const el of [diagMean, diagStructure, diagPoints, diagSaturated]) {
+          setText(el, 'camera off');
+        }
+      }
+
+      setText(
+        diagGps,
+        d.gpsAccuracyMetres === null ? 'unknown' : `${Math.round(d.gpsAccuracyMetres)} m`,
+      );
+      setText(diagMagnetic, pct(d.magneticConfidence));
     },
 
     openCard(detail) {
