@@ -1,9 +1,10 @@
 /**
  * The sky at one moment, for one observer.
  *
- * This is the slow half of the loop. Recomputing it costs about a millisecond
- * for a thousand stars, and the sky moves a quarter of a degree in that same
- * minute, so it runs on a timer rather than per frame.
+ * This is the slow half of the loop. Recomputing it costs a couple of
+ * milliseconds for the full nine-thousand-star catalogue, and the sky moves a
+ * quarter of a degree in that same minute, so it runs on a timer rather than
+ * per frame.
  */
 
 import {

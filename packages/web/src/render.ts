@@ -5,8 +5,8 @@
  * fast it changes:
  *
  *   slow (about 1 Hz)  -- where things are in the sky. The sky turns 15 degrees
- *                         an hour, so recomputing 1,000 stars every frame is
- *                         wasted effort.
+ *                         an hour, so recomputing nine thousand stars every
+ *                         frame is wasted effort.
  *   fast (every frame) -- where the phone is pointed, and the projection.
  *
  * The cull matters more than anything else here: a dot product per object

@@ -27,10 +27,13 @@ No image recognition. StarGaze doesn't photograph the sky and guess — it
 calculates it, from three things: your location, the exact time, and which
 way you're pointing. That's genuinely all positional astronomy needs.
 
-• Stars to magnitude 4.5, roughly what a phone can pick out under a dark
-  sky, with all 88 constellation figures drawn complete.
-• The five planets visible to the naked eye, plus the Moon with its current
-  phase and illumination.
+• Nearly 9,000 stars, down to magnitude 6.5 — the naked-eye limit under a
+  genuinely dark sky — with all 88 constellation figures drawn complete. A
+  magnitude slider pulls that back to what a town actually shows.
+• Every planet from Mercury to Neptune, the four brightest asteroids, and
+  the Moon with its current phase and illumination.
+• Meteor shower radiants while a shower is running, with its peak date and
+  hourly rate.
 • A live camera view behind the overlay, so you can match the markers to
   the real sky — entirely optional, and the app works without it in a
   drag-to-look-around mode.

@@ -2,8 +2,8 @@
  * The Messier catalogue: galaxies, nebulae and clusters.
  *
  * Plain objects rather than the typed parallel arrays the star catalogue uses.
- * That trade is about volume -- a thousand stars are transformed in one pass
- * per sky update and want contiguous buffers, whereas this is a few dozen
+ * That trade is about volume -- nine thousand stars are transformed in one
+ * pass per sky update and want contiguous buffers, whereas this is a few dozen
  * entries carrying strings, where the array-of-structs is both cheaper to read
  * and cheaper to write.
  *
