@@ -39,6 +39,28 @@ BODIES = {
 
 MOON = "301"
 
+# The bright minor planets. Horizons takes a small-body record number with a
+# trailing semicolon; without it, "1" is Mercury's barycentre rather than Ceres,
+# which is the kind of mistake that produces plausible-looking wrong numbers.
+ASTEROIDS = {
+    "Ceres": "1;",
+    "Pallas": "2;",
+    "Juno": "3;",
+    "Vesta": "4;",
+}
+
+# Asteroid epochs are their own list because the elements are a single
+# osculating solution with a validity window (see tools/build_asteroids.py),
+# and the planetary epochs deliberately run out to 2045 to exercise the edge of
+# JPL's fitted range. Testing a two-body asteroid solution there would only
+# prove it degrades, which is already documented.
+ASTEROID_EPOCHS = [
+    "2024-03-15 22:00",
+    "2026-01-08 19:45",
+    "2027-09-30 11:15",
+    "2030-05-22 04:10",
+]
+
 # Spread across the seasons and across two decades, so a term that only
 # matters at one point in an orbit -- or only shows up decades from the
 # original four dates -- cannot hide. The range stays inside 1800-2050, where
@@ -152,7 +174,9 @@ def main() -> int:
         ),
         "site": SITE,
         "epochs": EPOCHS,
+        "asteroidEpochs": ASTEROID_EPOCHS,
         "geocentric": {},
+        "asteroids": {},
         "moonTopocentric": {},
         "moonGeocentric": {},
     }
@@ -164,6 +188,14 @@ def main() -> int:
             rows.append({"utc": when, "ra": ra, "dec": dec})
             log(f"  {name:9} {when}  RA {ra:10.5f}  Dec {dec:+9.5f}")
         fixture["geocentric"][name] = rows  # type: ignore[index]
+
+    for name, body in ASTEROIDS.items():
+        rows = []
+        for when in ASTEROID_EPOCHS:
+            ra, dec = geocentric_astrometric(body, when)
+            rows.append({"utc": when, "ra": ra, "dec": dec})
+            log(f"  {name:9} {when}  RA {ra:10.5f}  Dec {dec:+9.5f}")
+        fixture["asteroids"][name] = rows  # type: ignore[index]
 
     moon_topo = []
     moon_geo = []

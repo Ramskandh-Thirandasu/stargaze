@@ -24,6 +24,7 @@ export * from './apparent.js';
 export * from './catalog.js';
 export * from './deepsky.js';
 export * from './planets.js';
+export * from './asteroids.js';
 export * from './moon.js';
 export * from './declination.js';
 export * from './orientation.js';

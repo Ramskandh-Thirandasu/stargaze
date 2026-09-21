@@ -11,6 +11,9 @@ import {
   apparentTerms,
   applyApparentPlace,
   applyDiurnalParallax,
+  asteroidPosition,
+  asteroidsValidAt,
+  ASTEROIDS,
   combineAngles,
   countBrighterThan,
   createHorizontalBuffer,
@@ -41,7 +44,7 @@ import type { SkyData } from './data.js';
 import type { Position } from './sensors.js';
 import { starLabel } from './data.js';
 
-export type ObjectKind = 'planet' | 'moon' | 'sun' | 'star' | 'deepsky';
+export type ObjectKind = 'planet' | 'asteroid' | 'moon' | 'sun' | 'star' | 'deepsky';
 
 export interface SkyObject {
   name: string;
@@ -64,7 +67,8 @@ export interface SkyObject {
   /** Deep-sky only: the short axis, degrees. Nebulae and galaxies are not
    *  round, and drawing M31 as a circle would be off by a factor of three. */
   angularMinor?: number;
-  /** Deep-sky only: every catalogue number it has, e.g. "M31 · NGC 224". */
+  /** Every catalogue number it has: "M31 · NGC 224" for a Messier object,
+   *  "4 Vesta" for an asteroid. Absent for planets and the Moon. */
   designation?: string;
   /** Deep-sky only: "Galaxy", "Globular cluster", and so on. */
   objectType?: string;
@@ -88,6 +92,9 @@ export interface SkyFrame {
    *  variation validity window -- still applied (extrapolating a smooth
    *  field a little past its window beats nothing), but worth saying so. */
   declinationStale: boolean;
+  /** The same, for the asteroids' osculating elements -- see
+   *  asteroidsValidAt. Still drawn, still labelled stale. */
+  asteroidsStale: boolean;
 
   catalog: StarCatalog;
   stars: HorizontalBuffer;
@@ -156,6 +163,7 @@ export class SkyModel {
       declination: declination.degrees,
       declinationReliable: declination.reliable,
       declinationStale: declination.stale,
+      asteroidsStale: !asteroidsValidAt(this.data.asteroids, when),
       catalog: this.data.stars,
       stars: buffer,
       starCount,
@@ -261,6 +269,32 @@ export class SkyModel {
       });
     }
 
+    // The bright minor planets, on the same path as the planets proper: the
+    // only difference is which file their elements come from and which
+    // brightness law applies, both of which asteroidPosition handles.
+    for (const name of ASTEROIDS) {
+      const asteroid = asteroidPosition(this.data.asteroids, this.data.planets, name, ttJd);
+      const ofDate = precessFromJ2000(asteroid.ra, asteroid.dec, jd);
+      const apparent = applyApparentPlace(ofDate.ra, ofDate.dec, terms);
+      let horizontal = equatorialToHorizontal(apparent.ra, apparent.dec, lst, observer.latitude);
+      horizontal = applyDiurnalParallax(horizontal, asteroid.distance);
+      if (refract) horizontal = applyRefraction(horizontal);
+
+      objects.push({
+        name,
+        kind: 'asteroid',
+        ra: apparent.ra,
+        dec: apparent.dec,
+        altitude: horizontal.altitude,
+        azimuth: horizontal.azimuth,
+        magnitude: asteroid.magnitude,
+        angularDiameter: 0,
+        distance: asteroid.distance,
+        distanceUnit: 'au',
+        designation: this.data.asteroids.asteroids[name]?.designation ?? name,
+      });
+    }
+
     // Deep-sky objects ride the same path as the planets rather than the star
     // catalogue's bulk transform: there are a few dozen of them, they carry
     // strings, and they need a per-object size. No proper motion and no
@@ -332,7 +366,9 @@ export function tonight(frame: SkyFrame, data: SkyData, limit = 30): TonightEntr
           ? `${Math.round((object.illumination ?? 0) * 100)}% lit`
           : object.kind === 'deepsky'
             ? `${object.objectType} · ${object.designation}`
-            : 'Planet',
+            : object.kind === 'asteroid'
+              ? `Asteroid · ${object.designation}`
+              : 'Planet',
       magnitude: object.magnitude,
       altitude: object.altitude,
       azimuth: object.azimuth,
@@ -451,9 +487,17 @@ export function describe(index: number, frame: SkyFrame, data: SkyData): ObjectD
           ? `${Math.round((object.illumination ?? 0) * 100)}% illuminated`
           : object.kind === 'sun'
             ? 'The Sun'
-            : 'Planet',
+            : object.kind === 'asteroid'
+              ? (object.designation ?? 'Asteroid')
+              : 'Planet',
       chips: [
-        object.kind === 'moon' ? 'Satellite' : object.kind === 'sun' ? 'Star' : 'Planet',
+        object.kind === 'moon'
+          ? 'Satellite'
+          : object.kind === 'sun'
+            ? 'Star'
+            : object.kind === 'asteroid'
+              ? 'Asteroid'
+              : 'Planet',
         object.altitude > 0 ? 'Above horizon' : 'Below horizon',
       ],
       stats: [
@@ -475,7 +519,13 @@ export function describe(index: number, frame: SkyFrame, data: SkyData): ObjectD
       footer:
         object.kind === 'moon'
           ? 'The easiest target for checking the overlay is lined up.'
-          : 'Position computed on this device from orbital elements.',
+          : object.kind === 'asteroid'
+            ? // Said plainly because it is the one place in the app where the
+              // maths degrades with the calendar rather than staying put.
+              frame.asteroidsStale
+              ? 'Orbital elements are past the window they were fitted for -- the position will have drifted.'
+              : 'A two-body orbit fitted to a recent epoch, computed on this device.'
+            : 'Position computed on this device from orbital elements.',
     };
   }
 
@@ -590,7 +640,9 @@ export function search(
               ? 'Sun'
               : object.kind === 'deepsky'
                 ? `${object.objectType} · ${object.designation}`
-                : 'Planet',
+                : object.kind === 'asteroid'
+                  ? `Asteroid · ${object.designation}`
+                  : 'Planet',
         ),
         magnitude: object.magnitude,
         altitude: object.altitude,

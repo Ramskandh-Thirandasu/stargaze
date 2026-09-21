@@ -10,7 +10,7 @@
  * be more machinery than the whole app.
  */
 
-const VERSION = 'stargaze-v2';
+const VERSION = 'stargaze-v3';
 
 /** The catalogues. These never change, so cache-first with no revalidation. */
 const DATA = /\/data\/[^/]+\.json$/;
@@ -30,6 +30,7 @@ self.addEventListener('install', (event) => {
         './data/names.json',
         './data/constellations.json',
         './data/planets.json',
+        './data/asteroids.json',
         './data/declination.json',
         './data/deepsky.json',
       ]),

@@ -1,9 +1,11 @@
 /**
  * Loading the generated catalogues.
  *
- * Six small JSON files, ~58 KB gzipped between them. They are fetched once and
- * parsed into typed arrays; after that the app never touches the network again,
- * which is the point -- it is used in fields, not on wifi.
+ * Seven small JSON files, around 180 KB gzipped between them -- most of that
+ * the star catalogue, which reaches the naked-eye limit under a dark sky. They
+ * are fetched once and parsed into typed arrays; after that the app never
+ * touches the network again, which is the point -- it is used in fields, not
+ * on wifi.
  */
 
 import {
@@ -12,6 +14,7 @@ import {
   parseStarCatalog,
   parseStarNames,
   resolveConstellations,
+  type AsteroidTable,
   type ConstellationFigures,
   type ConstellationJson,
   type DeclinationGrid,
@@ -30,6 +33,7 @@ export interface SkyData {
   names: Map<number, StarName>;
   figures: ConstellationFigures;
   planets: PlanetTable;
+  asteroids: AsteroidTable;
   declination: DeclinationGrid;
   deepSky: DeepSkyObject[];
 }
@@ -43,15 +47,23 @@ async function json<T>(path: string): Promise<T> {
 }
 
 export async function loadSkyData(base = './data'): Promise<SkyData> {
-  const [starsJson, namesJson, constellationsJson, planets, declinationJson, deepSkyJson] =
-    await Promise.all([
-      json<StarCatalogJson>(`${base}/stars.json`),
-      json<StarNamesJson>(`${base}/names.json`),
-      json<ConstellationJson>(`${base}/constellations.json`),
-      json<PlanetTable>(`${base}/planets.json`),
-      json<DeclinationGridJson>(`${base}/declination.json`),
-      json<DeepSkyJson>(`${base}/deepsky.json`),
-    ]);
+  const [
+    starsJson,
+    namesJson,
+    constellationsJson,
+    planets,
+    asteroids,
+    declinationJson,
+    deepSkyJson,
+  ] = await Promise.all([
+    json<StarCatalogJson>(`${base}/stars.json`),
+    json<StarNamesJson>(`${base}/names.json`),
+    json<ConstellationJson>(`${base}/constellations.json`),
+    json<PlanetTable>(`${base}/planets.json`),
+    json<AsteroidTable>(`${base}/asteroids.json`),
+    json<DeclinationGridJson>(`${base}/declination.json`),
+    json<DeepSkyJson>(`${base}/deepsky.json`),
+  ]);
 
   const stars = parseStarCatalog(starsJson);
 
@@ -60,6 +72,7 @@ export async function loadSkyData(base = './data'): Promise<SkyData> {
     names: parseStarNames(namesJson),
     figures: resolveConstellations(constellationsJson, stars),
     planets,
+    asteroids,
     declination: parseDeclinationGrid(declinationJson),
     deepSky: parseDeepSky(deepSkyJson),
   };

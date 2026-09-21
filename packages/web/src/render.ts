@@ -63,6 +63,13 @@ const PLANET_COLOR: Record<string, string> = {
   Saturn: '#f0d9a8',
   Uranus: '#a8e4e0',
   Neptune: '#8fb4f0',
+  // The asteroids share one muted grey: they are rocks, they are points, and
+  // giving each a colour would imply the app knows something about them that
+  // it does not.
+  Vesta: '#cfc6bb',
+  Ceres: '#cfc6bb',
+  Pallas: '#cfc6bb',
+  Juno: '#cfc6bb',
   Sun: '#fff1c4',
   Moon: '#f2e6ce',
 };

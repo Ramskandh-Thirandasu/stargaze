@@ -146,11 +146,8 @@ export function solveKepler(meanAnomalyDeg: number, eccentricity: number): numbe
   return e;
 }
 
-/** Elements for `name` propagated to `jd`. */
-function elementsAt(table: PlanetTable, name: PlanetName, jd: number): KeplerianElements {
-  const entry = table.planets[name];
-  if (!entry) throw new Error(`planets.json has no entry for ${name}`);
-
+/** One body's elements propagated to `jd`. */
+function elementsAt(entry: PlanetEntry, jd: number): KeplerianElements {
   const t = (jd - J2000) / DAYS_PER_CENTURY;
   const { elements, rates } = entry;
 
@@ -172,7 +169,19 @@ export function heliocentricEcliptic(
   name: PlanetName,
   jd: number,
 ): Vec3 {
-  const { a, e, i, L, peri, node } = elementsAt(table, name, jd);
+  const entry = table.planets[name];
+  if (!entry) throw new Error(`planets.json has no entry for ${name}`);
+  return heliocentricFromEntry(entry, jd);
+}
+
+/**
+ * The same, from a bare element set.
+ *
+ * Split out because the asteroids keep their elements in their own file but
+ * move on exactly the same ellipse -- see asteroids.ts.
+ */
+export function heliocentricFromEntry(entry: PlanetEntry, jd: number): Vec3 {
+  const { a, e, i, L, peri, node } = elementsAt(entry, jd);
 
   const argumentOfPerihelion = peri - node;
   const meanAnomaly = L - peri;
@@ -238,45 +247,64 @@ export interface BodyPosition extends Equatorial {
 }
 
 /**
- * Geocentric position of a planet.
+ * Geocentric position of anything on a fixed ellipse round the Sun.
  *
- * Corrected for light time: what is seen now is where the planet was when the
+ * Corrected for light time: what is seen now is where the body was when the
  * light left it, which for Neptune is four hours ago.
+ *
+ * `earthTable` is consulted for Earth's own position and nothing else, so an
+ * asteroid carrying elements from a separate file still measures itself
+ * against the same Earth the planets do. Brightness is the caller's business
+ * because it is the one thing that genuinely differs between a planet and a
+ * rock: one follows the Almanac's polynomials, the other the IAU's H-G law.
  */
-export function planetPosition(
-  table: PlanetTable,
-  name: PlanetName,
+export function geocentricPosition(
+  earthTable: PlanetTable,
+  entry: PlanetEntry,
   jd: number,
+  magnitude: (heliocentricDistance: number, distance: number, phaseAngle: number) => number,
 ): BodyPosition {
-  const earth = heliocentricEcliptic(table, 'Earth', jd);
+  const earth = heliocentricEcliptic(earthTable, 'Earth', jd);
 
-  let planet = heliocentricEcliptic(table, name, jd);
-  let offset: Vec3 = { x: planet.x - earth.x, y: planet.y - earth.y, z: planet.z - earth.z };
+  let body = heliocentricFromEntry(entry, jd);
+  let offset: Vec3 = { x: body.x - earth.x, y: body.y - earth.y, z: body.z - earth.z };
   let distance = Math.hypot(offset.x, offset.y, offset.z);
 
   // One iteration is plenty: the correction to the correction is milliarcseconds.
-  planet = heliocentricEcliptic(table, name, jd - distance * LIGHT_DAYS_PER_AU);
-  offset = { x: planet.x - earth.x, y: planet.y - earth.y, z: planet.z - earth.z };
+  body = heliocentricFromEntry(entry, jd - distance * LIGHT_DAYS_PER_AU);
+  offset = { x: body.x - earth.x, y: body.y - earth.y, z: body.z - earth.z };
   distance = Math.hypot(offset.x, offset.y, offset.z);
 
-  const heliocentricDistance = Math.hypot(planet.x, planet.y, planet.z);
+  const heliocentricDistance = Math.hypot(body.x, body.y, body.z);
   const sunDistance = Math.hypot(earth.x, earth.y, earth.z);
 
-  // Law of cosines on the Sun-planet-Earth triangle.
+  // Law of cosines on the Sun-body-Earth triangle.
   const cosPhase =
     (heliocentricDistance * heliocentricDistance + distance * distance - sunDistance * sunDistance) /
     (2 * heliocentricDistance * distance);
   const phaseAngle = toDegrees(Math.acos(Math.max(-1, Math.min(1, cosPhase))));
 
-  const equatorial = vectorToEquatorial(eclipticToEquatorialJ2000(offset));
-
   return {
-    ...equatorial,
+    ...vectorToEquatorial(eclipticToEquatorialJ2000(offset)),
     distance,
     heliocentricDistance,
     phaseAngle,
-    magnitude: planetMagnitude(name, heliocentricDistance, distance, phaseAngle),
+    magnitude: magnitude(heliocentricDistance, distance, phaseAngle),
   };
+}
+
+/** Geocentric position of a planet. */
+export function planetPosition(
+  table: PlanetTable,
+  name: PlanetName,
+  jd: number,
+): BodyPosition {
+  const entry = table.planets[name];
+  if (!entry) throw new Error(`planets.json has no entry for ${name}`);
+
+  return geocentricPosition(table, entry, jd, (heliocentric, distance, phase) =>
+    planetMagnitude(name, heliocentric, distance, phase),
+  );
 }
 
 /**
