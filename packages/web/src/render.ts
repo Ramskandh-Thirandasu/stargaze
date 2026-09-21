@@ -19,6 +19,7 @@ import {
   couldBeVisible,
   directionFromHorizontal,
   focalLength,
+  layoutLabels,
   project,
   viewConeRadius,
   type CameraBasis,
@@ -107,6 +108,15 @@ export class SkyRenderer {
 
   /** Screen positions of everything drawn this frame, for hit-testing. */
   private readonly hits: { x: number; y: number; index: number; radius: number }[] = [];
+
+  /** Named objects waiting to be laid out -- see drawObjects. */
+  private readonly pendingLabels: {
+    text: string;
+    x: number;
+    y: number;
+    fill: string;
+    alpha: number;
+  }[] = [];
 
   /**
    * Per-star fill colours, built once per catalogue.
@@ -365,6 +375,12 @@ export class SkyRenderer {
     ctx.font = '500 11px "IBM Plex Mono", ui-monospace, monospace';
     ctx.textAlign = 'center';
 
+    // Labels are collected here and drawn after every marker, for two
+    // reasons: layoutLabels needs to see them all at once to nudge them off
+    // each other, and drawing them last stops a later planet's glow painting
+    // over an earlier name.
+    this.pendingLabels.length = 0;
+
     frame.objects.forEach((object, index) => {
       if (object.altitude < -2) return;
       // One rule for the whole sky: nothing fainter than the user's setting
@@ -422,12 +438,7 @@ export class SkyRenderer {
       }
 
       if (options.showLabels) {
-        ctx.fillStyle = 'rgba(236, 229, 215, 0.82)';
-        ctx.fillText(
-          object.name,
-          clampLabelX(ctx, object.name, point.x, this.width),
-          point.y - radius - 8,
-        );
+        this.queueLabel(object.name, point.x, point.y - radius - 8, 'rgba(236, 229, 215, 0.82)');
       }
 
       this.hits.push({
@@ -438,9 +449,54 @@ export class SkyRenderer {
       });
     });
 
+    this.flushLabels();
     ctx.restore();
 
     if (options.selected !== null) this.drawSelection(frame, basis, viewport, options.selected);
+  }
+
+  /** Hold a label until every marker is down. `alpha` is captured now
+   *  because globalAlpha will have moved on by the time it is drawn. */
+  private queueLabel(text: string, x: number, y: number, fill: string): void {
+    this.pendingLabels.push({ text, x, y, fill, alpha: this.context.globalAlpha });
+  }
+
+  /**
+   * Draw the collected labels, nudged off each other.
+   *
+   * At magnitude 6.5 there are enough named objects in a crowded field --
+   * the Pleiades region, the Orion belt -- that two names land on the same
+   * few pixels and neither is readable. layoutLabels shifts the later one
+   * up, and drops it entirely rather than shifting it so far that it points
+   * at the wrong object. A missing label is recoverable by tapping; a label
+   * attached to the wrong star is not.
+   */
+  private flushLabels(): void {
+    const ctx = this.context;
+    if (this.pendingLabels.length === 0) return;
+
+    const boxes = this.pendingLabels.map((label) => {
+      const width = ctx.measureText(label.text).width;
+      return {
+        x: clampLabelX(ctx, label.text, label.x, this.width) - width / 2,
+        y: label.y,
+        width,
+        height: 12,
+      };
+    });
+
+    const placed = layoutLabels(boxes);
+
+    this.pendingLabels.forEach((label, i) => {
+      const y = placed[i];
+      if (y === null || y === undefined) return;
+      ctx.globalAlpha = label.alpha;
+      ctx.fillStyle = label.fill;
+      ctx.fillText(label.text, clampLabelX(ctx, label.text, label.x, this.width), y);
+    });
+
+    ctx.globalAlpha = 1;
+    this.pendingLabels.length = 0;
   }
 
   /**
@@ -491,12 +547,7 @@ export class SkyRenderer {
     // there to be found if you go looking, but a name floating over what
     // looks like empty sky is a promise the sky is not keeping tonight.
     if (options.showLabels && !washedOut) {
-      ctx.fillStyle = `rgba(${DEEP_SKY_COLOR},0.82)`;
-      ctx.fillText(
-        object.name,
-        clampLabelX(ctx, object.name, point.x, this.width),
-        point.y - ry - 8,
-      );
+      this.queueLabel(object.name, point.x, point.y - ry - 8, `rgba(${DEEP_SKY_COLOR},0.82)`);
     }
 
     this.hits.push({ x: point.x, y: point.y, index: -1 - index, radius: Math.max(rx, 10) });
@@ -551,12 +602,11 @@ export class SkyRenderer {
     // whether it is worth staying out. Suppressed when washed out, same as
     // the deep-sky labels: no confident name over sky that is not delivering.
     if (options.showLabels && !washedOut) {
-      ctx.fillStyle = `rgba(${SHOWER_COLOR},0.85)`;
-      const label = `${object.name} ~${object.hourlyRate}/hr`;
-      ctx.fillText(
-        label,
-        clampLabelX(ctx, label, point.x, this.width),
+      this.queueLabel(
+        `${object.name} ~${object.hourlyRate}/hr`,
+        point.x,
         point.y - radius * 1.9 - 8,
+        `rgba(${SHOWER_COLOR},0.85)`,
       );
     }
 
@@ -644,12 +694,29 @@ export class SkyRenderer {
     const y = this.height / 2;
 
     ctx.save();
-    ctx.strokeStyle = 'rgba(236, 229, 215, 0.22)';
-    ctx.lineWidth = 1;
 
-    ctx.beginPath();
-    ctx.arc(x, y, 27, 0, Math.PI * 2);
-    ctx.stroke();
+    // Over a camera feed of a streetlit sky, a 0.22-alpha hairline is not
+    // there at all. Laying a dark stroke under it buys the contrast back
+    // without putting any more light into a dark-adapted eye -- which
+    // brightening it would, and that is the one thing this app must not do.
+    const outline = (path: () => void): void => {
+      ctx.strokeStyle = 'rgba(5, 7, 13, 0.55)';
+      ctx.lineWidth = 3;
+      path();
+      ctx.stroke();
+      ctx.strokeStyle = 'rgba(236, 229, 215, 0.34)';
+      ctx.lineWidth = 1;
+      path();
+      ctx.stroke();
+    };
+
+    outline(() => {
+      ctx.beginPath();
+      ctx.arc(x, y, 27, 0, Math.PI * 2);
+    });
+
+    ctx.strokeStyle = 'rgba(236, 229, 215, 0.34)';
+    ctx.lineWidth = 1;
 
     for (const [dx, dy] of [
       [0, -1],
@@ -657,10 +724,11 @@ export class SkyRenderer {
       [-1, 0],
       [1, 0],
     ] as const) {
-      ctx.beginPath();
-      ctx.moveTo(x + dx * 42, y + dy * 42);
-      ctx.lineTo(x + dx * 22, y + dy * 22);
-      ctx.stroke();
+      outline(() => {
+        ctx.beginPath();
+        ctx.moveTo(x + dx * 42, y + dy * 42);
+        ctx.lineTo(x + dx * 22, y + dy * 22);
+      });
     }
 
     ctx.fillStyle = 'rgba(236, 229, 215, 0.52)';
