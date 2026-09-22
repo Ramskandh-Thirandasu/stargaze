@@ -44,12 +44,14 @@ All of it runs on the device, so your location and camera never leave your phone
 
 ## What it doesn't do
 
-- The compass is the weak point. Phone magnetometers are usually 5 to 15 degrees off, which is 10 to 30 Moon widths. That's what the calibration screen is for, but you have to use it.
-- Metal and electronics make that worse. Indoors or in a car the heading can be badly wrong. The app warns you when the readings look unstable, but it can't fix them.
-- The catalogue stops at magnitude 6.5, roughly what your eyes manage under a genuinely dark sky. The view defaults to 4.5 so it isn't a mess in town, so turn the slider up when you're somewhere dark. If you want to go deeper than your eyes do, use Stellarium.
-- It can't see a roof. Point at a ceiling and the stars really are up there, so it draws them. It watches the camera, GPS accuracy and the magnetic field to work out whether it's looking at open sky, and dims the overlay with a note when it doubts it. Those thresholds are guesses I haven't checked against a real camera yet, so Settings has a Sky check panel showing the live numbers. Point it at the sky, then at a ceiling, and the gap between the readings is where the threshold belongs.
+The compass is the weak point, and it's the one thing that will actually make the app wrong. See [Accuracy](#accuracy) for the numbers. Metal and electronics make it worse, so indoors or in a car the heading can be badly wrong. The app warns you when the readings look unstable, but it can't fix them.
+
+A few other things worth knowing:
+
+- The catalogue stops at magnitude 6.5, roughly what your eyes manage under a genuinely dark sky. The view defaults to 4.5 so it isn't a mess in town. Turn the slider up when you're somewhere dark. If you want to go deeper than your eyes do, use Stellarium.
+- It can't see a roof. Point at a ceiling and the stars really are up there, so it draws them. It watches the camera, GPS accuracy and the magnetic field to guess whether it's looking at open sky, and dims the overlay when it doubts it. Those thresholds are guesses I haven't checked against a real camera yet, so Settings has a Sky check panel with the live numbers. Point it at the sky, then at a ceiling, and the gap is where the threshold belongs.
 - On iOS you have to tap the page once before motion works. Safari won't grant the orientation permission without a gesture.
-- Neptune sits around magnitude 7.9, past the catalogue limit, so it's calculated and searchable but in practice never drawn. Uranus (about 5.7) turns up once you raise the limit past it, which is fair, since it genuinely is a naked-eye object under a dark sky.
+- Neptune sits around magnitude 7.9, past the catalogue limit, so it's calculated and searchable but never drawn. Uranus is about 5.7 and turns up once you raise the limit past it, which is fair, since it genuinely is naked-eye under a dark sky.
 
 Nothing disappears silently, though. Things that are up but washed out by daylight or a bright Moon get dimmed and labelled rather than removed.
 
@@ -91,17 +93,17 @@ npm run ios:open
 
 Needs a Mac and Xcode, and you have to set a signing team on the App target yourself. Use a real device rather than the Simulator, which has no camera or magnetometer and so only ever shows the drag fallback. Fuller notes are in [docs/ios-build.md](docs/ios-build.md).
 
-### Deploying
-
-Every push to `main` does two things. `.github/workflows/pages.yml` builds and publishes to GitHub Pages, and `.github/workflows/sync.yml` force-pushes every branch and tag to the GitLab mirror at [gitlab.com/Ramskandh-Thirandasu/star-gaze](https://gitlab.com/Ramskandh-Thirandasu/star-gaze), which runs its own `.gitlab-ci.yml` and publishes GitLab Pages from the same commit.
-
-The sync only goes one way. Anything committed directly in GitLab gets overwritten by the next push from GitHub, `.gitlab-ci.yml` included, so edit that file here rather than in GitLab's web IDE.
-
-Both hosts serve the same bundle unmodified. The Vite `base` is `./` and the manifest and service worker use relative paths, so the app doesn't care whether it's served from `/stargaze/` or `/star-gaze/`.
-
 ### Rebuilding the star data
 
 `npm run data` runs the Python scripts in `tools/` to regenerate the JSON in `packages/web/public/data/`. You only need it to change the magnitude limit or pull newer source data. The generated files are committed, so a normal build never touches Python.
+
+### Deploying
+
+Every push to `main` builds and publishes to GitHub Pages, then force-pushes every branch and tag to the GitLab mirror at [gitlab.com/Ramskandh-Thirandasu/star-gaze](https://gitlab.com/Ramskandh-Thirandasu/star-gaze), which publishes GitLab Pages from the same commit.
+
+The sync only goes one way, so anything committed directly in GitLab gets overwritten by the next push from GitHub, `.gitlab-ci.yml` included. Edit that file here rather than in GitLab's web IDE.
+
+Both hosts serve the same bundle unmodified. The Vite `base` is `./` and the manifest and service worker use relative paths, so the app doesn't care whether it's served from `/stargaze/` or `/star-gaze/`.
 
 ## Accuracy
 
@@ -117,7 +119,7 @@ Positions are checked against [JPL Horizons](https://ssd.jpl.nasa.gov/horizons/)
 | Mars | 31.7" | Neptune | 34.4" |
 | Moon | 16.5" | | |
 
-The worst is Saturn, at about a quarter of a Moon width. A compass that's 5 to 15 degrees off is 18,000 to 54,000 arcseconds, so the hardware error is hundreds of times bigger than anything the maths adds. That's why I built calibration before adding more catalogue data.
+The worst is Saturn, at about a quarter of a Moon width. A phone compass is usually 5 to 15 degrees off, which is 18,000 to 54,000 arcseconds, or 10 to 30 Moon widths. The hardware error is hundreds of times bigger than anything the maths adds, which is why I built calibration before adding more catalogue data.
 
 ## Project layout
 
