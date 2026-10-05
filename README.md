@@ -101,13 +101,8 @@ Needs a Mac and Xcode, and you have to set a signing team on the App target your
 
 Every push to `main` builds and publishes to GitHub Pages, then force-pushes every branch and tag to the GitLab mirror at [gitlab.com/Ramskandh-Thirandasu/star-gaze](https://gitlab.com/Ramskandh-Thirandasu/star-gaze), which publishes GitLab Pages from the same commit.
 
-The sync only goes one way, so anything committed directly in GitLab gets overwritten by the next push from GitHub, `.gitlab-ci.yml` included. Edit that file here rather than in GitLab's web IDE.
-
-Both hosts serve the same bundle unmodified. The Vite `base` is `./` and the manifest and service worker use relative paths, so the app doesn't care whether it's served from `/stargaze/` or `/star-gaze/`.
-
+The sync only goes one way, so anything committed directly in GitLab gets overwritten by the next push from GitHub, `.gitlab-ci.yml` included.
 ## Accuracy
-
-The maths is much more accurate than the hardware, so the compass is what limits you, not the astronomy.
 
 Positions are checked against [JPL Horizons](https://ssd.jpl.nasa.gov/horizons/) at six dates between 2021 and 2045. Errors are in arcseconds, where an arcsecond is 1/3600 of a degree. The full Moon is about 1,800 arcseconds across.
 
@@ -118,21 +113,6 @@ Positions are checked against [JPL Horizons](https://ssd.jpl.nasa.gov/horizons/)
 | Venus | 18.0" | Uranus | 110.2" |
 | Mars | 31.7" | Neptune | 34.4" |
 | Moon | 16.5" | | |
-
-The worst is Saturn, at about a quarter of a Moon width. A phone compass is usually 5 to 15 degrees off, which is 18,000 to 54,000 arcseconds, or 10 to 30 Moon widths. The hardware error is hundreds of times bigger than anything the maths adds, which is why I built calibration before adding more catalogue data.
-
-## Project layout
-
-```
-tools/          Python scripts that build the catalogue JSON. Not shipped in the app.
-packages/core/  The astronomy: coordinates, ephemeris, visibility, pointing. 250 tests.
-packages/web/   The app, plus the generated data in public/data.
-server/         Local https server, only used for testing on a phone.
-android/        Capacitor wrapper around the same web build.
-ios/            The same, for iOS.
-```
-
-`packages/core` has no DOM dependencies, which is what makes the maths testable on its own. That split was the first decision I made and the one I'd keep.
 
 ## Data sources
 
@@ -149,12 +129,6 @@ These are compiled into the app at build time by the scripts in `tools/`. None o
 | Magnetic declination | [IGRF-14](https://www.ngdc.noaa.gov/IAGA/vmod/igrf.html), IAGA Working Group V-MOD via NOAA NCEI |
 
 Gzipped, the whole data set is about 180 KB, most of it the star catalogue. Small enough to ship offline, which is the point. The reference positions used in the tests come from [JPL Horizons](https://ssd.jpl.nasa.gov/horizons/).
-
-## AI usage
-
-I designed and built this myself. The architecture, the positioning maths, the sensor handling, the rendering and the tests are my work. I read the JPL documentation and the catalogue formats, made the decisions, and did the debugging.
-
-I used an AI coding assistant along the way, mostly for moving around the codebase and routine edits. It made me faster. It didn't design the app, and I can explain any part of it.
 
 ## License
 
